@@ -1,0 +1,1253 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.4cm,top=2.6cm,bottom=2.6cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[T1]{fontenc}
+\usepackage[expansion=false]{microtype}
+\usepackage{parskip}
+\usepackage{caption}
+\usepackage[hidelinks,colorlinks=true,linkcolor=accent,urlcolor=accent]{hyperref}
+
+\definecolor{accent}{HTML}{1F4E79}
+\definecolor{rule}{HTML}{B8C4CE}
+\definecolor{codebg}{HTML}{F6F7F9}
+\definecolor{good}{HTML}{1B6B3C}
+\definecolor{warn}{HTML}{9A4B00}
+
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.7em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small\textcolor{accent}{creditlib}}
+\fancyhead[R]{\small\textcolor{accent}{Single-Name CDS Pricing Engine}}
+\fancyfoot[C]{\small\thepage}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{rule},
+  breaklines=true, showstringspaces=false,
+  keywordstyle=\color{accent}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  language=Python, xleftmargin=0pt, framexleftmargin=3pt,
+  aboveskip=0.9em, belowskip=0.9em,
+}
+
+\newcommand{\keypoint}[1]{%
+  \par\vspace{0.4em}\noindent
+  \colorbox{codebg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small #1}}%
+  \par\vspace{0.5em}}
+
+\begin{document}
+
+%% ------------------------------------------------------------------ title
+\begin{titlepage}
+\centering
+\vspace*{2.4cm}
+{\Huge\bfseries\color{accent} creditlib\par}
+\vspace{0.7em}
+{\LARGE A Single-Name CDS Pricing Engine\par}
+\vspace{0.5em}
+{\large Derivations, Implementation, Validation, and Application\par}
+\vspace{2.4cm}
+\rule{0.62\textwidth}{0.6pt}\par
+\vspace{1.1em}
+{\large Pearson\par}
+\vspace{0.4em}
+{\normalsize Prepared as a portfolio project for credit / fixed-income analyst roles\par}
+\vspace{1.1em}
+\rule{0.62\textwidth}{0.6pt}\par
+\vspace{2.6cm}
+
+\begin{minipage}{0.82\textwidth}\small
+\textbf{Scope.} A single-name credit default swap pricing engine built from first
+principles in Python. Every formula is derived before it is coded. Every component is
+validated against no-arbitrage conditions and, where a comparable object exists, against
+QuantLib. The library bootstraps a hazard-rate term structure from quoted CDS spreads,
+prices both legs of a CDS by exact closed-form integration, and produces the standard
+credit risk measures.
+
+\medskip
+\textbf{Status.} Steps 1--5 complete. 86 tests passing. Applied to a five-name
+U.S.\ bank holding company cross-section.
+\end{minipage}
+
+\vfill
+{\small August 2026}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%% ------------------------------------------------------------- 1. overview
+\section{Overview and Design Philosophy}
+
+\subsection{What the library does}
+
+\texttt{creditlib} prices single-name credit default swaps. Given a discount curve and a
+survival (credit) curve it computes the present value of both legs, the par spread, the
+mark-to-market, and the standard risk measures. Run in reverse, it bootstraps the survival
+curve from quoted market spreads.
+
+The stack is Python with NumPy, SciPy, pandas and matplotlib. QuantLib is used
+exclusively as an independent check --- never as a dependency of the pricing path.
+
+\subsection{Two rules that shaped every decision}
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Derive before coding.} No formula is asserted. Every expression in this
+document is obtained from a stated definition or a replication argument, so that each line
+of the implementation can be defended.
+\item \textbf{Validate against no-arbitrage and against QuantLib.} Structural conditions
+(positivity, monotonicity, $Q(0)=1$) are enforced by construction where possible and
+asserted at runtime where not. Numerical agreement with QuantLib is asserted at the
+tightest tolerance the conventions permit, and where conventions differ the discrepancy is
+explained and quantified rather than absorbed into a loose tolerance.
+\end{enumerate}
+
+\subsection{The design decision that made everything else work}
+
+Both objects the pricer needs --- a discount curve and a survival curve --- have the same
+mathematical form:
+\[
+\text{value}(t) \;=\; \exp\!\left(-\int_0^t \text{rate}(s)\,ds\right)
+\]
+with a \emph{piecewise-constant} instantaneous rate. For the discount curve that rate is
+the instantaneous forward $f(s)$; for the credit curve it is the hazard rate $h(s)$.
+
+Choosing piecewise-constant rates was not a convenience. It has three consequences that
+each turn out to be load-bearing:
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{No-arbitrage becomes a sign constraint.} A survival curve is admissible if
+and only if $h \ge 0$. This is a box constraint on a scalar rather than a shape constraint
+policed after the fact.
+\item \textbf{The pricing integrals close in elementary form.} Because $f$ and $h$ are both
+constant on the merged grid of curve knots, the protection leg and accrual integrals have
+exact closed forms. No quadrature error is layered on top of the interpolation error
+already accepted.
+\item \textbf{The inverse problem becomes square and triangular.} With knots placed at the
+quote maturities, $n$ market quotes determine exactly $n$ hazard rates, and the Jacobian is
+lower triangular --- so the bootstrap is $n$ one-dimensional root-finds rather than an
+$n$-dimensional nonlinear solve.
+\end{enumerate}
+
+\keypoint{Consequences (2) and (3) are why the same interpolation choice appears in both
+curve classes. Had the discount curve used a spline on zero rates, the protection-leg
+integral would have required numerical quadrature and the bootstrap would have lost its
+clean structure.}
+
+\subsection{Repository layout}
+
+\begin{lstlisting}[language={}]
+creditlib/
+  daycount.py         ACT/360, ACT/365F, 30/360
+  curves.py           PiecewiseFlatCurve -> CreditCurve
+  discount_curve.py   DiscountCurve (log-linear on discount factors)
+  schedule.py         IMM roll dates, ACT/360 accruals, seasoned stubs
+  cds.py              legs, price_cds, par_spread, CS01 / IR DV01 / Rec01 / JTD
+  bootstrap.py        survival curve from quoted spreads
+  validation.py       runtime no-arbitrage assertions
+tests/                79 tests
+notebooks/            bank_credit_analysis.ipynb
+\end{lstlisting}
+
+\newpage
+%% --------------------------------------------------- 2. survival / hazard
+\section{Survival Curves and Hazard Rates}
+
+\subsection{Setting up}
+
+Let $\tau \ge 0$ be the default time of the reference entity, a random variable under a
+risk-neutral measure. The \textbf{survival function} is
+\[
+Q(t) \;=\; \mathbb{P}(\tau > t), \qquad Q(0) = 1 .
+\]
+Assume $Q$ is absolutely continuous with density $f(t) = -Q'(t)$.
+
+\subsection{Deriving the hazard rate}
+
+The hazard rate is the \emph{conditional} instantaneous default intensity --- the rate of
+default over the next instant, given survival to now:
+\[
+h(t) \;=\; \lim_{\Delta \downarrow 0}
+\frac{1}{\Delta}\,\mathbb{P}\!\left(t < \tau \le t+\Delta \,\middle|\, \tau > t\right).
+\]
+Expanding the conditional probability, and noting
+$\{t < \tau \le t+\Delta\} \subset \{\tau > t\}$ so the intersection is the numerator event:
+\[
+h(t) \;=\; \lim_{\Delta \downarrow 0} \frac{1}{\Delta}
+\cdot \frac{Q(t) - Q(t+\Delta)}{Q(t)}
+\;=\; \frac{-Q'(t)}{Q(t)}
+\;=\; -\frac{d}{dt}\ln Q(t).
+\]
+The hazard rate \emph{is} the negative log-derivative of survival. Integrating from $0$ to
+$t$ with $Q(0) = 1$:
+\begin{equation}
+\boxed{\;Q(t) \;=\; \exp\!\left(-\int_0^t h(s)\,ds\right) \;=\; e^{-H(t)}\;}
+\end{equation}
+where $H(t) = \int_0^t h(s)\,ds$ is the \textbf{cumulative hazard}.
+
+\subsection{Two properties worth stating out loud}
+
+\textbf{$h$ is an intensity, not a probability.} It carries units of $1/\text{time}$ and may
+exceed 1. A name with $h = 3.0$ is not mis-specified; it has an expected time to default of
+four months.
+
+\textbf{Survival probabilities multiply.} $Q(t_2)/Q(t_1)$ is the probability of surviving
+from $t_1$ to $t_2$ \emph{given} survival to $t_1$. This conditional structure is what makes
+the bootstrap sequential: each new instrument extends the curve without disturbing what came
+before.
+
+\subsection{Piecewise-constant hazards}
+
+Place knots at $0 = t_0 < t_1 < \dots < t_n$ and set $h(s) = h_i$ for
+$s \in (t_{i-1}, t_i]$. Then
+\[
+H(t_j) = \sum_{i=1}^{j} h_i\,(t_i - t_{i-1}),
+\qquad
+H(t) = H(t_{j-1}) + h_j\,(t - t_{j-1}) \ \ \text{for } t \in (t_{j-1}, t_j].
+\]
+$H$ is continuous and piecewise linear, so $\ln Q$ is piecewise linear. Therefore:
+
+\keypoint{\textbf{Piecewise-constant forward hazards and log-linear interpolation of
+survival probabilities are the same assumption}, not two competing ones. This is the ISDA
+CDS Standard Model convention and matches QuantLib's \texttt{BackwardFlat} interpolation.}
+
+\subsection{Why parameterise in hazard space}
+
+One could bootstrap $Q$ directly. With $Q = e^{-H}$ the admissibility conditions become:
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Condition} & \textbf{Enforced by} \\
+\midrule
+$Q(0) = 1$ & $H(0)=0$, structural \\
+$0 < Q(t) \le 1$ & $H \ge 0$, structural \\
+$Q$ non-increasing & $h_i \ge 0$ --- one box constraint \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A rising survival curve implies $\mathbb{P}(\text{default in }(t_1,t_2]) < 0$, a genuine
+arbitrage. In hazard space that is a sign constraint on a scalar; in survival space it is a
+shape constraint requiring post-hoc policing. Accordingly \texttt{CreditCurve.\_\_init\_\_}
+rejects negative rates, and \texttt{from\_survival\_probabilities} on a rising curve fails at
+\emph{construction}, not at pricing.
+
+\subsection{Validation}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+\item Flat hazard reproduces $e^{-ht}$ to $10^{-15}$.
+\item $H(t) = -\ln Q(t)$ to machine zero.
+\item Segment slopes of $H$ recover the input hazards to $10^{-12}$ relative.
+\item Survival composes multiplicatively across sub-periods.
+\item Negative hazard, and a \emph{rising} survival input, both rejected at construction.
+\item \textbf{QuantLib:} survival probabilities match \texttt{ql.HazardRateCurve} to
+$10^{-12}$ relative at the knots \emph{and} at interior points. Matching between knots is
+the meaningful part --- it proves the interval convention $(t_{i-1}, t_i]$ agrees, not merely
+the arithmetic.
+\end{itemize}
+
+\newpage
+%% ----------------------------------------------------- 3. discount curve
+\section{The Discount Curve}
+
+\subsection{The discount factor is the primitive}
+
+$D(t)$ is the price today of a contract paying 1 unit with certainty at time $t$. Three
+properties, and only three:
+\[
+D(0) = 1, \qquad D(t) > 0, \qquad D \text{ continuous.}
+\]
+$D(0)=1$ is definitional. $D(t) > 0$ is the only genuine arbitrage condition --- a
+non-positive price for a strictly positive payoff is free money.
+
+\keypoint{\textbf{Nothing requires $D$ to decrease.} $D(t) > 1$ means paying 1.02 today to
+receive 1.00 later, which is exactly a negative rate. EUR, JPY and CHF curves traded there
+for years. The zero lower bound is an empirical regularity arising from cash storage and
+custody costs, not a no-arbitrage bound. Contrast the hazard rate, where negativity
+genuinely \emph{is} an arbitrage. This asymmetry is reflected in the code: the credit curve
+enforces $h \ge 0$; the discount curve does not enforce $f \ge 0$.}
+
+\subsection{Zero rates are $D$ in rate units}
+
+A rate is meaningless without a compounding convention. Same $D(t)$, four legitimate answers:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Convention} & \textbf{Definition} & \textbf{Inverted} \\
+\midrule
+Continuous   & $D = e^{-z_c t}$              & $z_c = -\ln D / t$ \\
+Annual       & $D = (1+z_a)^{-t}$            & $z_a = D^{-1/t} - 1$ \\
+$m$-periodic & $D = (1 + z_m/m)^{-mt}$       & $z_m = m\left(D^{-1/(mt)} - 1\right)$ \\
+Simple       & $D = (1 + z_s t)^{-1}$        & $z_s = (1/D - 1)/t$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Linked by $1 + z_a = e^{z_c}$, with $z_m \to z_c$ as $m \to \infty$. The statement
+``the 5-year zero is 4.2\%'' is incomplete until the compounding \emph{and} the day count are
+also stated. On the curve used later in this document, $D(5) = 0.82201223$ quotes as
+3.9200\% continuous, 3.9393\% quarterly, 3.9587\% semi-annual, 3.9978\% annual, or 4.3305\%
+simple --- a 411bp spread across quotations of one identical number. The library stores
+$\ln D$ internally and converts on the way out, so there is a single representation and no
+convention drift.
+
+\subsection{Forward rates, derived by replication}
+
+You wish to lend from $t_1$ to $t_2$ at a rate agreed today. Two ways to reach a known
+amount at $t_2$:
+
+\textbf{Strategy A.} Buy $1/D(t_2)$ units of the $t_2$ zero. Cost today: 1. Payoff at $t_2$:
+$1/D(t_2)$.
+
+\textbf{Strategy B.} Buy $1/D(t_1)$ units of the $t_1$ zero. Cost today: 1. At $t_1$ receive
+$1/D(t_1)$ and roll to $t_2$ at a rate $f(t_1,t_2)$ agreed \emph{today}. Payoff at $t_2$:
+$\frac{1}{D(t_1)}e^{f(t_1,t_2)(t_2-t_1)}$.
+
+Both cost 1 today and pay an amount known today with certainty. Two riskless portfolios with
+identical cost must have identical payoff, else one shorts the rich and buys the cheap for a
+certain profit at zero net investment. Equating:
+\[
+\frac{1}{D(t_2)} = \frac{1}{D(t_1)}\,e^{f(t_1,t_2)(t_2-t_1)}
+\qquad\Longrightarrow\qquad
+\boxed{\;f(t_1,t_2) = \frac{\ln D(t_1) - \ln D(t_2)}{t_2 - t_1}\;}
+\]
+Under simple compounding --- what an FRA or a SOFR-style coupon actually pays --- the same
+argument gives
+\[
+f_{\text{simple}}(t_1,t_2) = \frac{1}{\tau}\left(\frac{D(t_1)}{D(t_2)} - 1\right)
+\]
+where $\tau$ is the \emph{contract's} accrual fraction under \emph{its} day count, which is
+generally not $t_2 - t_1$ measured in curve time.
+
+\subsection{Instantaneous forwards: zeros are averages}
+
+Taking $t_2 \downarrow t_1$:
+\[
+f(t) = -\frac{d}{dt}\ln D(t)
+\qquad\Longleftrightarrow\qquad
+D(t) = \exp\!\left(-\int_0^t f(s)\,ds\right),
+\]
+the same structure as the hazard rate. Combining with $z_c(t) = -\ln D(t)/t$:
+\begin{equation}
+z_c(t) = \frac{1}{t}\int_0^t f(s)\,ds
+\end{equation}
+
+\keypoint{\textbf{Zero rates are running averages of instantaneous forwards.} Forwards are
+the marginal quantity, zeros the cumulative one --- so forwards are always more volatile, a
+humped forward curve produces a monotone zero curve, and an interpolation that looks smooth
+on zeros can be violent on forwards.}
+
+\subsection{Why log-linear on discount factors}
+
+Interpolate linearly in $\ln D$. For $t \in [t_i, t_{i+1}]$ with
+$\theta = (t - t_i)/(t_{i+1}-t_i)$:
+\[
+\ln D(t) = (1-\theta)\ln D(t_i) + \theta \ln D(t_{i+1})
+\qquad\Longleftrightarrow\qquad
+D(t) = D(t_i)\left(\frac{D(t_{i+1})}{D(t_i)}\right)^{\theta}
+\]
+
+Four arguments, in ascending order of practical weight:
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.25em]
+\item \textbf{Positivity is structural.} $D = \exp(\cdot) > 0$; the one genuine arbitrage
+condition cannot be violated by construction.
+\item \textbf{It implies piecewise-constant instantaneous forwards.} Differentiating,
+$f(t)$ is the constant slope $\frac{\ln D(t_i) - \ln D(t_{i+1})}{t_{i+1}-t_i}$ on each
+bucket. Log-linear DF interpolation is therefore the \emph{minimal-information} choice: the
+flattest forward curve consistent with the quotes, injecting no structure the market did not
+supply.
+\item \textbf{It is internally consistent.} Any forward computed between two points inside
+one bucket returns that bucket's forward, regardless of sampling.
+\item \textbf{It localises risk.} Bump the 5Y quote: only the two adjacent buckets' forwards
+move, so bucketed DV01 is clean. Under a cubic spline on zeros the perturbation propagates
+across the whole curve and hedge ratios smear into untouched tenors. This is the reason
+desks use it.
+\end{enumerate}
+
+\subsubsection*{What the alternatives cost}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+\item \textbf{Linear on $D$:} $f(t) = -D'/D = c/(a+bt)$, a hyperbola inside each bucket.
+\item \textbf{Linear on zero rates:} $f(t) = z(t) + t\,z'(t)$, giving a sawtooth forward
+curve with jumps at every knot. It can manufacture \emph{negative forwards from strictly
+positive zero rates} whenever $z' < -z/t$, i.e.\ on any steep inversion.
+\item \textbf{Cubic spline on zeros:} smooth zeros, ringing forwards, globally non-local.
+\end{itemize}
+
+Measured on the curve used in this document, comparing instantaneous forwards:
+
+\begin{center}
+\begin{tabular}{rrr}
+\toprule
+$t$ & log-linear DF & linear zeros \\
+\midrule
+3.25 & 3.8150\% & 3.8675\% \\
+3.75 & 3.8150\% & 3.8325\% \\
+4.25 & 3.8150\% & 3.7975\% \\
+4.75 & 3.8150\% & 3.7625\% \\
+5.25 & 4.1300\% & 4.0850\% \\
+6.75 & 4.1300\% & 4.1750\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Linear zeros slope \emph{down} through 3--5Y and \emph{up} through 5--7Y. No quote said that.
+
+\subsubsection*{The accepted cost}
+
+The forward curve under log-linear DFs is a step function, discontinuous at knots. This is
+irrelevant for discounting and linear products. If smooth forwards were required
+(convexity-sensitive exotics), monotone-convex or tension splines would be the move, at the
+price of losing property (2) and weakening (4).
+
+\subsection{Day counts, and where money actually leaks}
+
+Two separate jobs, routinely conflated:
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Curve time:} mapping dates to the $t$ in $D(t)$. One convention throughout.
+This library uses ACT/365F, the ISDA CDS model convention.
+\item \textbf{Accrual fractions:} computing $\tau$ for a specific contract's coupon,
+governed by that contract's terms.
+\end{enumerate}
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Convention} & \textbf{$\tau$} & \textbf{Where it lives} \\
+\midrule
+ACT/360  & actual days $/$ 360 & USD \& EUR money market, SOFR, \textbf{CDS premium} \\
+30/360   & $\frac{360\Delta y + 30\Delta m + \Delta d}{360}$ & US corporates, USD fixed swap leg \\
+ACT/365F & actual days $/$ 365 & GBP money market, ISDA CDS curve time \\
+ACT/ACT  & actual $/$ actual   & US Treasuries \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{The 360-day year.} ACT/360 divides by 360 but counts real days, so a calendar year
+accrues $365/360 = 1.0139$ ``years'' and a rate quoted ACT/360 understates the annualised
+rate: $r_{365} = r_{360}\times\frac{365}{360}$. A 5.00\% ACT/360 rate is 5.069\% ACT/365 ---
+6.9bp of pure convention.
+
+\textbf{Concrete, on 10mm over one quarter, 15 Jun $\to$ 15 Sep (92 actual days), 5.00\%:}
+\[
+\text{ACT/360: } \$127{,}777.78
+\qquad\qquad
+\text{30/360: } \$125{,}000.00
+\]
+
+\keypoint{\textbf{\$2,777.78 difference. One leg, one quarter, same rate, same dates.}
+Annualised across a swap book, convention errors are a live P\&L break rather than a
+rounding issue.}
+
+\subsection{Validation}
+
+Every compounding convention inverts its own definition to $10^{-14}$; $1+z_a = e^{z_c}$
+holds; $z_m \to z_c$ monotonically ($m = 4, 52, 365, 10^4$; error $< 10^{-5}$); the
+replication identity $D(t_1)e^{-f(t_1,t_2)(t_2-t_1)} = D(t_2)$ holds to $10^{-14}$, so the
+derivation is tested rather than assumed; $z_c(t) = \frac1t\int_0^t f$ verified by quadrature
+to $10^{-6}$; forwards constant inside a bucket to $10^{-13}$.
+
+\textbf{QuantLib:} \texttt{ql.DiscountCurve} \emph{is} \texttt{InterpolatedDiscountCurve<LogLinear>},
+so parity holds everywhere rather than only at knots --- matched at 11 points from 0.07Y to
+30Y at $10^{-12}$ relative, plus \texttt{zeroRate} under both \texttt{Continuous} and
+\texttt{Compounded/Annual}, plus \texttt{forwardRate} at three intervals.
+
+\newpage
+%% -------------------------------------------------------- 4. CDS pricing
+\section{CDS Valuation}
+
+\subsection{Setup and the one assumption that matters}
+
+Value at $t=0$, notional $N$. The protection buyer pays a running coupon $s$ on dates
+$t_1 < \dots < t_M$ with accrual fractions $\Delta_i$ (ACT/360). The seller pays $(1-R)N$ at
+default time $\tau$ if $\tau \le T$.
+
+\keypoint{\textbf{Default and interest rates are assumed independent.} This lets
+$\mathbb{E}[D(\tau)\mathbf{1}_{\tau \le T}]$ factor into $\int D(t)(-dQ(t))$ with $D$
+deterministic. It is market standard and it is \emph{wrong in exactly the states one cares
+about} --- in a credit crisis defaults cluster and rates rally, so $D(\tau)$ is high
+precisely when $\tau$ is small. The correction is second-order for investment-grade single
+names and material for distressed. The assumption is defensible; pretending it is costless
+is not.}
+
+\subsection{Protection leg}
+
+The payoff is $(1-R)$ at the random time $\tau$, contingent on $\tau \le T$:
+\[
+\text{PV}_{\text{prot}}
+= (1-R)\,\mathbb{E}\!\left[D(\tau)\mathbf{1}_{\tau\le T}\right]
+= (1-R)\int_0^T D(t)\,\big(-dQ(t)\big).
+\]
+Here $-dQ(t)$ is the unconditional probability of defaulting in $[t, t+dt)$. Converting to
+hazard form using $Q = e^{-H}$, so $Q'(t) = -h(t)Q(t)$:
+\begin{equation}
+\boxed{\;\text{PV}_{\text{prot}} = (1-R)\int_0^T D(t)\,h(t)\,Q(t)\,dt\;}
+\end{equation}
+Read directly: $h(t)\,dt$ is the chance of defaulting in the next instant given survival,
+$Q(t)$ the chance of getting there, $D(t)$ discounts it.
+
+\subsubsection*{Evaluating it exactly}
+
+Most implementations Riemann-sum this integral. They need not. On any interval $[a,b]$ where
+$f$ and $h$ are \emph{both} constant --- guaranteed on the merged grid of discount-curve and
+credit-curve knots --- write $D(t)Q(t) = D(a)Q(a)e^{-(f+h)(t-a)}$ and set $c = f+h$:
+\[
+\int_a^b D h Q\,dt
+= h\,D(a)Q(a)\!\int_0^{b-a}\!\!e^{-cu}du
+= \frac{h}{c}\,D(a)Q(a)\left[1 - e^{-c(b-a)}\right],
+\]
+and since $D(b)Q(b) = D(a)Q(a)e^{-c(b-a)}$ this collapses to
+\begin{equation}
+\boxed{\;\int_a^b D\,h\,Q\,dt \;=\; \frac{h}{f+h}\Big[D(a)Q(a) - D(b)Q(b)\Big]\;}
+\end{equation}
+
+\keypoint{Summing over sub-intervals gives an \textbf{exact} protection leg. The only error
+is the curve interpolation already chosen upstream --- no quadrature error is layered on top.
+This is precisely why Steps 1 and 2 both used piecewise-flat rates.}
+
+Sanity check: setting $f = 0$ makes the factor 1 and the sum telescopes to
+$(1-R)[Q(0)-Q(T)] = (1-R)(1-Q(T))$, the undiscounted expected loss.
+
+\subsection{Premium leg}
+
+\subsubsection*{Scheduled coupons}
+\[
+\text{PV}_{\text{coupon}} = s\sum_{i=1}^{M}\Delta_i\,D(t_i)\,Q(t_i)
+\]
+
+\subsubsection*{Accrual on default --- why the term exists}
+
+Premium accrues \emph{continuously} but pays \emph{quarterly}. If default lands at
+$\tau \in (t_{i-1}, t_i)$, the buyer has enjoyed protection from $t_{i-1}$ to $\tau$ without
+paying for it, since the coupon was not yet due. The contract requires that stub at
+settlement.
+
+\keypoint{Without this term, a CDS would be worth a different amount depending on
+\emph{where in the coupon cycle it is traded}. Protection bought the day after a coupon date
+would carry up to 90 days of free protection in the default state; bought the day before, a
+full quarter's premium for one day of cover. The standardised 100bp/500bp fixed-coupon
+contract would not be fungible across trade dates. \textbf{The accrual term is what makes the
+instrument standardisable} --- not a rounding refinement.}
+
+\[
+\text{PV}_{\text{accr}} = s\sum_i \frac{\Delta_i}{t_i - t_{i-1}}
+\int_{t_{i-1}}^{t_i}(t - t_{i-1})\,D(t)\,h(t)\,Q(t)\,dt
+\]
+The prefactor converts a curve-time offset into an accrual fraction; it is exact whenever the
+day count is proportional within a period, true for ACT/360 and ACT/365F up to day-rounding.
+
+The same closed form is available. On $[a,b]$ inside a period starting at $p$, with $c=f+h$
+and $L = b-a$, using $\int_0^L u e^{-cu}du = \frac{1-e^{-cL}(1+cL)}{c^2}$:
+\[
+\int_a^b (t-p)DhQ\,dt
+= h\,D(a)Q(a)\left\{\frac{1 - e^{-cL}(1+cL)}{c^2} + (a-p)\,\frac{1-e^{-cL}}{c}\right\}
+\]
+
+\subsection{The risky annuity and mark-to-market}
+\[
+A \;=\; \underbrace{\sum_i \Delta_i D(t_i)Q(t_i)}_{\text{coupons}}
+\;+\; \underbrace{\sum_i \frac{\Delta_i}{t_i-t_{i-1}}\int(t-t_{i-1})DhQ\,dt}_{\text{accrual}},
+\qquad \text{PV}_{\text{prem}} = s\cdot A
+\]
+$A$ does not depend on $s$. For the protection buyer (long protection, short credit):
+\[
+\text{MTM}_{\text{buyer}} = \text{PV}_{\text{prot}} - s\cdot A
+\]
+Under the post-2009 standard contract $s$ is fixed at 100bp or 500bp and the MTM is exchanged
+upfront, so this is literally the upfront payment.
+
+\subsection{Par spread: a ratio, not a solve}
+\begin{equation}
+\text{MTM}=0 \;\Longrightarrow\;
+\boxed{\;s_{\text{par}} = \frac{\text{PV}_{\text{prot}}}{A}\;}
+\end{equation}
+Because the protection leg does not involve $s$ and $A$ does not either, the par spread is a
+quotient --- no root-finding. This matters precisely because the bootstrap \emph{does} require
+a solve: there the unknown is the hazard rate, not the spread. It also gives
+\[
+\text{MTM}_{\text{buyer}} = (s_{\text{par}} - s_{\text{contract}})\cdot A ,
+\]
+from which CS01 follows.
+
+\subsection{Clean versus dirty par spread}
+
+Under the post-2009 standard the accrual period begins at the IMM date preceding the trade,
+so the buyer pays a \emph{full} first coupon and is rebated the accrued portion. A par spread
+computed from the raw annuity therefore includes a stub of coupon for which no protection is
+provided.
+
+\keypoint{The market convention is the \textbf{clean} par spread, which nets the accrued
+rebate out of the annuity. On a 1-year contract that stub can be 16\% of the annuity.
+Bootstrapping from the dirty spread overstates the front hazard by roughly 18bp --- a 20\%
+error at the front of the curve. \texttt{par\_spread(clean=True)} is the default.}
+
+\subsection{The credit triangle, exactly}
+
+With flat $h$, flat $r$, and \emph{continuously paid} premium:
+\[
+A_{\text{cont}} = \int_0^T e^{-(r+h)t}dt = \frac{1-e^{-(r+h)T}}{r+h},
+\qquad
+\text{PV}_{\text{prot}} = (1-R)h\cdot\frac{1-e^{-(r+h)T}}{r+h}
+\]
+Dividing:
+\begin{equation}
+s_{\text{par}} = h(1-R) \qquad \textbf{exactly, independent of } r \textbf{ and } T
+\end{equation}
+
+\keypoint{The credit triangle is not an approximation in this limit --- it is an identity. The
+approximation error in practice comes entirely from \emph{discrete} premium payment. This is
+the primary validation target for the whole pricer.}
+
+\subsection{Risk measures --- four different things}
+
+\begin{center}
+\begin{tabular}{p{2.3cm}p{5.6cm}p{6.4cm}}
+\toprule
+\textbf{Measure} & \textbf{Definition} & \textbf{Note} \\
+\midrule
+RPV01 ($A$) & PV of 1 unit of spread, survival-contingent & Not a risk number; a \emph{unit}. Quoted per unit notional. \\[0.3em]
+CS01 & $\Delta$MTM for $+1$bp on the par spread curve, re-bootstrapped & $\approx A\cdot N\cdot 10^{-4}$ to first order. Second-order gap because moving spreads moves $Q$, which moves $A$. \\[0.3em]
+IR DV01 & $\Delta$MTM for $+1$bp on the discount curve & Small: the legs largely offset. \\[0.3em]
+JTD & $(1-R)N - \text{accrued} - \text{MTM}$ & Discontinuous. Not a derivative. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Hand-checked example}
+
+Flat $r = 5\%$ continuous, flat $h = 2\%$, $R = 40\%$, $T = 1$, one annual payment, no
+accrual-on-default. Every quantity is derivable on paper in three lines:
+\[
+\text{PV}_{\text{prot}} = 0.60\cdot\tfrac{0.02}{0.07}\cdot(1-e^{-0.07}),
+\qquad A = e^{-0.07},
+\qquad s_{\text{par}} = \tfrac{\text{PV}}{A}
+\]
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+& \textbf{Engine} & \textbf{Hand} & \textbf{Difference} \\
+\midrule
+PV$_{\text{prot}}$ & 0.011589630873 & 0.011589630873 & $1.7\times10^{-18}$ \\
+RPV01              & 0.932393819906 & 0.932393819906 & 0 \\
+$s_{\text{par}}$   & 124.299739 bp  & 124.299739 bp  & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Convergence to the credit triangle}
+
+Target $h(1-R) = 120$bp:
+
+\begin{center}
+\begin{tabular}{rrr}
+\toprule
+\textbf{Frequency} & \textbf{No accrual} & \textbf{With accrual} \\
+\midrule
+1   & 124.2997 bp & 123.0401 bp \\
+4   & 121.0562 bp & 120.7525 bp \\
+52  & 120.0808 bp & 120.0577 bp \\
+365 & 120.0117 bp & 120.0083 bp \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Monotone, and inside 0.01bp at daily frequency. Verified independent of $r$ and $T$ across
+nine $(r,T)$ combinations.
+
+\subsubsection*{What the accrual term actually does}
+
+A sharper claim than ``it improves accuracy''. Over a period of length $\delta$ the discrete
+coupon undervalues the continuous one by $\approx (f+h)\frac{\delta^2}{2}DQ$, while the
+accrual integral contributes $\approx h\frac{\delta^2}{2}DQ$. It therefore cancels
+\emph{exactly the hazard component} of the discretisation error and leaves the discounting
+component. Prediction: the residual error ratio tends to $f/(f+h) = 0.05/0.07 = 0.7143$.
+Measured at quarterly frequency: $0.7525/1.0562 = 0.7125$. This is now a test.
+
+\subsection{The 8bp gap, decomposed}
+
+A QuantLib comparison (flat 4\%/3\%, 5Y IMM) prices at 172.03bp, not the 180bp the credit
+triangle predicts. That gap is contract economics, not error, and factors cleanly:
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{ACT/360 versus ACT/365F.} Every $\Delta_i$ is $365/360$ too large relative to
+curve time, inflating the annuity. Measured ratio: 0.9863014 against
+$360/365 = 0.9863014$ --- nine digits.
+\item \textbf{Seasoned stub.} Accrual began 20 Jun; protection runs from 17 Aug. The annuity
+carries $58/360$ of a coupon buying no protection --- 3.59\% of RPV01.
+\end{enumerate}
+\[
+180.90 \times \tfrac{360}{365} \times (1 - 0.0359) = 172.014\text{bp}
+\quad\text{versus}\quad 172.027\text{bp priced}
+\]
+A residual of 0.013bp. Trading the same maturity \emph{on} an IMM date recovers 178.42bp:
+wedge 2 vanishes, wedge 1 remains.
+
+\subsection{Worked example: 5Y, 10mm notional, 100bp coupon}
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Protection leg PV & 390,711.35 \\
+Premium leg PV & 466,061.41 \\
+\quad coupons & 465,222.72 \\
+\quad accrual & 838.69 \\
+RPV01 (per unit) & 4.660614 \\
+MTM & $-$75,350.06 \\
+Par spread & 83.8326 bp \\
+Accrued (rebate) & 16,111.11 \\
+Upfront points & $-$0.7535\% \\
+\midrule
+CS01 (reprice) & 4,689.72 \\
+CS01 (analytic) & 4,660.61 \ ($-$0.62\%) \\
+IR DV01 & 6.54 \ (0.14\% of CS01) \\
+Rec01 ($+$1pt) & $-$6,511.86 \\
+JTD & 6,059,238.95 \ (1,292$\times$ CS01) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Buying 100bp protection on an 84bp name loses 75k, as it should. Accrual is 0.18\% of the
+premium leg in PV --- nearly nothing --- while moving the par spread meaningfully. IR DV01 is
+0.14\% of CS01: the legs almost fully offset.
+
+\keypoint{\textbf{JTD is 1,292$\times$ CS01.} A book can be flat CS01 and still be destroyed
+by a single default. That ratio is why desks limit both, and why an index hedge that
+neutralises spread risk leaves idiosyncratic default risk entirely untouched.}
+
+\newpage
+%% ------------------------------------------------------- 5. bootstrapping
+\section{Bootstrapping the Survival Curve}
+
+\subsection{The inverse problem is underdetermined until parameterised}
+
+Forward: given $h(\cdot)$, compute $s_{\text{par}}(T)$. Backward: given $n$ quotes, find
+$h(\cdot)$. Infinitely many hazard functions reproduce $n$ quotes.
+
+\keypoint{\textbf{The market determines $n$ numbers, not a function.} The bootstrapped curve
+is \emph{quotes plus an interpolation assumption}, never ``the market's view of default''.}
+
+Piecewise-constant $h$ with knots placed \emph{exactly at the quote maturities} gives $n$
+unknowns for $n$ equations: square system, unique solution, zero residual. Knots anywhere else
+turn this into least-squares fitting, a different problem with different failure modes.
+
+\subsection{Why sequential: the Jacobian is triangular}
+
+Define the residual $\Phi_k = \text{PV}_{\text{prot},k} - s_k A_k$. The $k$-th CDS matures at
+$T_k$, so both legs integrate against $Q(t)$ only for $t \le T_k$, and $Q$ on that range
+depends only on $h_1,\dots,h_k$. Hence
+\[
+\frac{\partial \Phi_k}{\partial h_j} = 0 \quad \text{for all } j > k,
+\qquad
+J = \begin{pmatrix}
+\ast & 0 & 0 & 0 & 0\\
+\ast & \ast & 0 & 0 & 0\\
+\ast & \ast & \ast & 0 & 0\\
+\ast & \ast & \ast & \ast & 0\\
+\ast & \ast & \ast & \ast & \ast
+\end{pmatrix}
+\]
+
+Lower triangular, so the solution is forward substitution: an $n$-dimensional nonlinear
+system collapses to $n$ one-dimensional root-finds. Four consequences, in ascending order of
+practical weight:
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.25em]
+\item \textbf{Robustness.} Bracketed 1-D root-finding on a monotone function essentially
+always converges. Multivariate Newton needs a good starting point and can diverge into
+negative hazards.
+\item \textbf{Exact reproduction.} $n$ equations, $n$ unknowns --- the fit is exact, not
+least-squares.
+\item \textbf{Economic meaning.} $h_k$ is the \emph{marginal} default intensity over
+$(T_{k-1},T_k]$ implied by the incremental information in the $k$-th quote. It is a forward
+quantity, like a forward rate. The 5Y quote does not describe aggregate 0--5Y default risk;
+it describes 3--5Y risk given what 1Y and 3Y already said.
+\item \textbf{Error localisation.} A bad 10Y quote cannot corrupt $h_1$. Errors propagate
+forward, never backward.
+\end{enumerate}
+
+\subsection{Why solve $\Phi$ rather than the par-spread residual}
+
+Both have the same root and the same monotonicity, but the ratio form degenerates: at the
+first tenor $A \to 0$ as $h$ grows, so $s_{\text{par}}$ is unbounded (reaching 3.01 at $h=5$
+on a 1Y contract) while $\Phi$ stays bounded within $[-0.012, 0.589]$ and is measurably less
+curved. Both failure modes remain detectable in the $\Phi$ form: $\Phi_k(0) > 0$ catches the
+inverted-curve case and bracket-expansion failure catches the ceiling.
+
+\subsection{Why each 1-D solve is well posed}
+
+Raising $h_k$ raises $\text{PV}_{\text{prot}}$ (the contribution over $(T_{k-1},T_k]$ rises
+monotonically toward the certain-default limit $D(T_{k-1})Q(T_{k-1})$) and lowers the coupon
+part of $A$ (every $Q(t_i)$ for $t_i > T_{k-1}$ falls). Both push $\Phi$ the same way, so
+$\Phi$ is strictly increasing and has at most one root.
+
+One honest caveat: the \emph{accrual} part of $A$ also rises with $h$, so denominator
+monotonicity is not unconditional. That term is $O(h\delta^2)$ and is dominated over any
+realistic range. It is verified numerically over $h \in [10^{-6}, 5]$ rather than asserted as
+a theorem.
+
+\subsection{Failure modes fall out of the bracketing}
+
+\subsubsection*{Spread above the certain-default ceiling}
+
+As $h_k \to \infty$, default becomes certain immediately after $T_{k-1}$:
+\[
+s^{\max}(T_k) \;=\;
+\frac{\text{PV}_{\text{prot}}(T_{k-1}) + (1-R)\,D(T_{k-1})Q(T_{k-1})}
+     {A(T_{k-1}) + \varepsilon_{\text{accr}}}
+\]
+Finite for every $k \ge 2$ (unbounded for $k=1$, where $A \to 0$). A quote above $s^{\max}$
+cannot be reproduced by any non-negative hazard: it prices protection above the maximum
+possible loss given the earlier quotes. That is an arbitrage in the quote set, and the
+bootstrap must say so rather than silently returning garbage.
+
+\subsubsection*{Negative implied forward hazard on an inverted curve}
+
+Inversion alone is normal --- distressed names invert routinely, because near-term default
+risk dominates. What fails is inversion steep enough that reproducing $s_k < s_{k-1}$ requires
+$h_k < 0$, which means $Q$ \emph{rises} over $(T_{k-1},T_k]$: a negative forward default
+probability. The arbitrage is to sell $T_{k-1}$ protection and buy $T_k$ protection, being
+paid to own a strictly non-negative claim over the window.
+
+A rough threshold from the credit triangle: the implied forward hazard turns negative when
+$s_k T_k \lesssim s_{k-1}T_{k-1}$, i.e.\ when the spread$\times$maturity product falls.
+
+\subsubsection*{Recovery inconsistency and the upfront problem}
+
+$R$ is an assumption, not a quote. Pushing $R$ toward 1 collapses loss given default, so
+$s^{\max}$ falls and previously fine quotes become unbootstrappable. Distressed names are the
+acute case: the market stops quoting running spread and quotes \emph{points upfront against a
+fixed coupon}, precisely because the par-spread representation degenerates. Bootstrapping a
+2000bp name from a ``par spread'' is a modelling error before it is a numerical one.
+
+\subsection{Results}
+
+Quotes at 1/3/5/7/10Y of 55/82/105/118/130bp, $R = 40\%$:
+
+\begin{center}
+\begin{tabular}{rrrrrrr}
+\toprule
+\textbf{Tenor} & \textbf{Quoted} & \textbf{Repriced} & \textbf{Error} & \textbf{Hazard} & \textbf{Fwd spread} & \textbf{Survival} \\
+\midrule
+1.0  & 55.0000 & 55.0000 & $-2.6\times10^{-14}$ & 92.35  & 55.41  & 0.992263 \\
+3.0  & 82.0000 & 82.0000 & $-1.7\times10^{-14}$ & 158.48 & 95.09  & 0.961264 \\
+5.0  & 105.0000 & 105.0000 & $+3.5\times10^{-14}$ & 239.62 & 143.77 & 0.916283 \\
+7.0  & 118.0000 & 118.0000 & $-5.2\times10^{-14}$ & 263.71 & 158.22 & 0.869146 \\
+10.0 & 130.0000 & 130.0000 & $+1.7\times10^{-14}$ & 282.38 & 169.43 & 0.798488 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Maximum repricing error: $4.44\times10^{-16}$ relative --- two units in the last place of a
+float64. Verified two independent ways: par spread equality, and pricing each quoted CDS at
+its own coupon off the bootstrapped curve ($|\text{MTM}| < 10^{-7}$ on 10mm).
+
+\keypoint{Note the hazard column against the forward-spread column. The 5Y quote is 105bp,
+but the marginal intensity over 3--5Y implies a 143.77bp forward spread. \textbf{Bootstrapped
+hazards are forward quantities.} Reading $h_5$ as ``the 5Y default intensity'' is the standard
+error.}
+
+\subsection{Triangularity, made testable}
+
+\texttt{test\_locality\_of\_the\_triangular\_system} bumps the 10Y quote by 50bp and asserts
+$h_1..h_4$ are unchanged using \texttt{np.array\_equal} --- bit-for-bit, not approximately.
+\texttt{test\_subset\_bootstrap\_matches\_prefix} bootstraps only the first three quotes and
+asserts exact equality with the first three hazards of the full run. That \emph{is} forward
+substitution.
+
+\subsection{Feasible quote windows}
+
+\begin{center}
+\begin{tabular}{rrrr}
+\toprule
+\textbf{Tenor} & \textbf{Floor} & \textbf{Ceiling} & \textbf{Quoted} \\
+\midrule
+1Y  & 0.00 bp   & 119,429.26 bp & 55.00 \\
+3Y  & 16.95 bp  & 6,576.34 bp   & 82.00 \\
+5Y  & 50.36 bp  & 1,985.56 bp   & 105.00 \\
+7Y  & 78.17 bp  & 1,154.55 bp   & 118.00 \\
+10Y & 88.80 bp  & 807.05 bp     & 130.00 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The floor rises and the ceiling collapses moving out the curve: each new quote is constrained
+on both sides by everything preceding it. The 1Y has no floor (nothing precedes it) and an
+effectively unbounded ceiling.
+
+\subsection{The recovery degeneracy}
+
+Same quotes, two recovery assumptions, both repricing to $4\times10^{-16}$:
+\[
+\frac{h(R=40\%)}{h(R=20\%)} = [1.333,\ 1.334,\ 1.337,\ 1.340,\ 1.343]
+\qquad\text{against}\qquad \frac{0.8}{0.6} = 1.333
+\]
+Implied 5Y cumulative default probability: 8.37\% at $R=40\%$, 6.34\% at $R=20\%$.
+
+\keypoint{\textbf{CDS spreads identify expected loss $h(1-R)$, not $h$.} A two-point spread in
+implied default probability from an assumption nobody observes. Any sentence beginning ``the
+CDS market is pricing an $X\%$ chance of default'' is really ``\dots given someone's recovery
+assumption''.}
+
+\newpage
+%% ---------------------------------------------------------- 6. application
+\section{Application: Five U.S.\ Bank Holding Companies}
+
+\subsection{What this analysis can and cannot claim}
+
+\keypoint{\textbf{One quote per name is not a term structure.} Each name supplies a single 5Y
+spread, so the bootstrap has one degree of freedom and returns a \emph{flat} hazard. Every
+point away from 5Y is the piecewise-flat assumption, not market information. The chart marks
+the 5Y point as observed and renders everything else dashed. Obtaining 1/3/5/7/10Y quotes per
+name would produce a genuine term structure --- the engine already handles it; the constraint is
+data, not model.}
+
+Two further constraints carried into every conclusion below:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+\item \textbf{Risk-neutral, not actuarial.} These probabilities embed a default risk premium,
+a liquidity premium, and correlation compensation. They run roughly 8--12$\times$ historical
+default rates for comparable ratings.
+\item \textbf{Indicative spreads, not executable marks.} Post-2014 single-name U.S.\ bank CDS
+is materially less liquid than pre-crisis, with much flow in CDX.NA.IG.
+\end{itemize}
+
+\subsection{Why 40\% recovery, and why it is the weakest input}
+
+40\% is the \textbf{ISDA quoting convention} for senior unsecured obligations of
+developed-market corporates. It makes quotes comparable. It is \emph{not} an estimate of what
+these instruments would recover. For U.S.\ bank holding companies the convention is doing more
+work than usual:
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.25em]
+\item \textbf{Holdco senior is the bail-in layer.} Single-name CDS on U.S.\ banks references
+the \emph{holding company}. Under Dodd-Frank Title II Orderly Liquidation Authority and the
+single-point-of-entry resolution strategy, holdco senior unsecured is explicitly TLAC --- it
+exists to be written down or converted so the operating subsidiaries continue. Its recovery in
+the scenario that triggers a CDS credit event is by design low, not the corporate-average 40\%.
+\item \textbf{The one clean data point is 8.625\%.} Lehman Brothers senior CDS settled at
+8.625 cents in the October 2008 auction --- roughly a fifth of the convention.
+\item \textbf{The empirical base is thin.} Bank senior recoveries are governed by resolution
+mechanics never tested at scale on a U.S.\ G-SIB.
+\end{enumerate}
+
+Practically: 40\% is defensible \emph{as a convention} and is the right choice for consistency
+with how the quotes were formed. It is not defensible as a forecast.
+
+\subsection{Results}
+
+\begin{center}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Name} & \textbf{5Y spread} & \textbf{Hazard} & \textbf{1Y PD} & \textbf{5Y PD} & \textbf{10Y PD} \\
+\midrule
+JPMorgan        & 58 bp & 96.2 bp  & 0.96\% & 4.70\% & 9.17\% \\
+Bank of America & 63 bp & 104.5 bp & 1.04\% & 5.09\% & 9.92\% \\
+U.S.\ Bancorp   & 67 bp & 111.1 bp & 1.11\% & 5.41\% & 10.52\% \\
+Wells Fargo     & 72 bp & 119.4 bp & 1.19\% & 5.80\% & 11.26\% \\
+Citigroup       & 85 bp & 141.0 bp & 1.40\% & 6.81\% & 13.15\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{bank_implied_pd.png}
+\caption{Left: risk-neutral cumulative default probability at $R=40\%$. Solid to the quote,
+dashed beyond --- the dashed portion is the flat-hazard assumption, not market data. Right:
+implied 5Y PD under four recovery assumptions.}
+\end{figure}
+
+\subsection{Three structural findings}
+
+\subsubsection*{The recovery assumption cannot touch the ranking}
+
+With a uniform $R$ across names, $h = s/(1-R)$ is a monotone transform of the spread, so the
+ordering is invariant --- recovery moves levels only. Reordering requires \emph{name-specific}
+recovery, and the required differential is large:
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+\textbf{Ties JPMorgan at $R=40\%$ if its own recovery is} & \\
+\midrule
+Bank of America & 34.83\% \\
+U.S.\ Bancorp   & 30.69\% \\
+Wells Fargo     & 25.52\% \\
+Citigroup       & 12.07\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Citigroup only ties JPMorgan under a 28-point recovery differential. \textbf{State the ordering
+with confidence; state the levels with a recovery caveat attached.}
+
+\subsubsection*{Rates are irrelevant here}
+
+A 600bp swing in the discount curve moves Citigroup's implied 5Y PD from 6.8300\% to 6.7807\%
+--- five basis points of probability. The Step 4 IR DV01 result, confirmed end to end.
+
+\subsubsection*{The entire cross-sectional signal is 27bp}
+
+The three tightest names sit inside 9bp of each other; JPM$\to$BAC is 0.394pp of PD on a 5bp
+spread gap. Whether JPM, BAC and USB are genuinely distinguishable on this data is a question
+about bid/ask, not about credit.
+
+\subsection{Risk-neutral versus actuarial}
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Aa-rated historical 5Y cumulative default rate & 0.31\% \\
+A-rated historical 5Y cumulative default rate & 0.56\% \\
+Baa-rated historical 5Y cumulative default rate & 1.55\% \\
+\midrule
+Market-implied range & 4.70\% -- 6.81\% \\
+Ratio to A-rated actuarial & 8.4$\times$ -- 12.2$\times$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Roughly an order of magnitude above realised default experience. That wedge is the risk
+premium --- compensation for jump-to-default, illiquidity, and the fact that bank defaults
+arrive correlated with everything else in a portfolio. It is not a forecast error; it is why
+risk-neutral PD is a \emph{pricing} quantity rather than an \emph{actuarial} one.
+
+\subsection{Market-implied ranking against fundamental ranking}
+
+\subsubsection*{Where they agree: Citigroup}
+
+The market puts Citi 27bp wide of JPMorgan --- a 47\% spread premium and the only gap in the
+set that clears any plausible bid/ask. A thin-PPNR-coverage thesis and the market's ordering
+point the same direction.
+
+Precision matters about what that agreement is worth: Citi's spread is also consistent with
+lower through-cycle ROTCE, ongoing transformation and consent-order costs, and a larger EM
+footprint. Concluding ``the market is pricing my PPNR thesis'' is over-attribution. The
+defensible claim is narrower --- \emph{the market independently ranks Citi last, and PPNR
+coverage is one of a small number of explanations consistent with that}.
+
+\subsubsection*{Where they disagree: Bank of America}
+
+A held-to-maturity tail thesis says BAC carries the largest unrealised securities loss position
+in the peer set relative to tangible capital. The market prices BAC as the \emph{second-safest}
+name --- 5bp inside U.S.\ Bancorp and 9bp inside Wells Fargo. On this data the market does not
+price the HTM tail as a credit event driver at all.
+
+\subsubsection*{The reframe}
+
+The instinct is to argue the market is wrong. The stronger move is to notice that CDS and a
+fundamental screen are answering \emph{different questions}, and that both can be right.
+
+A CDS prices the probability and severity of a \emph{credit event}. HTM losses do not cause a
+credit event through the income statement. They cause one only through a \textbf{funding
+channel}: forced liquidation of the HTM book to meet outflows, crystallising the mark and
+destroying capital. That is the SVB mechanism, and it is a liquidity-plus-concentration
+failure, not a securities-portfolio failure.
+
+For BAC that channel is weak: a very large, granular, heavily insured retail deposit base, a
+G-SIB LCR and NSFR regime, discount window access, and a post-March-2023 policy precedent for
+term lending against par. The market appears to be saying the HTM position is a \emph{book
+value and NII problem, not a solvency problem} --- that it suppresses tangible book,
+AOCI-adjusted CET1 and forward earnings power without moving the probability of resolution.
+
+\keypoint{If that is right, the HTM thesis is not contradicted by 63bp --- it is
+\textbf{mispriced in a different instrument}. A view that BAC's HTM tail impairs earnings power
+and capital return is an \emph{equity} view, or a preferred/AT1 view. Senior CDS is the wrong
+expression vehicle, and the fact that CDS does not reflect it is evidence about instrument
+selection rather than evidence against the thesis.
+
+\medskip
+\emph{``The market and I are not disagreeing about Bank of America. We are pricing different
+questions --- and my HTM thesis belongs in the capital structure below senior, where the loss
+actually lands.''}}
+
+\subsubsection*{The falsifiable version}
+
+This framing generates a test rather than an opinion. If the HTM tail is genuine credit risk
+that senior CDS is missing, it should appear first in funding-sensitive instruments: BAC's
+preferred/AT1 spreads widening relative to peers, the senior--sub CDS basis widening, or
+deposit beta and uninsured-deposit share deteriorating faster than the peer set. If those are
+flat while the equity discount persists, the market's separation is correct and the thesis is
+an earnings thesis wearing credit clothing.
+
+\subsection{Highest-value extensions}
+
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{Obtain a term structure.} 1/3/5/7/10Y quotes per name turn five numbers into
+five curves, and the \emph{shape} is where a funding thesis would show up --- a concern that is
+real but slow should steepen the front end relative to peers. A single 5Y point structurally
+cannot express that.
+\item \textbf{Add the sub-senior structure.} Senior/sub CDS basis and preferred spreads make
+the reframe above testable rather than rhetorical.
+\item \textbf{Pull current holdco ratings} as an independent third ranking. A
+market/fundamental/agency three-way comparison is materially more persuasive than a two-way.
+\end{enumerate}
+
+\newpage
+%% -------------------------------------------------------- 7. validation
+\section{Validation Summary}
+
+86 tests, all passing. QuantLib is used only as an independent oracle.
+
+\begin{center}
+\begin{tabular}{lrp{8.2cm}}
+\toprule
+\textbf{Module} & \textbf{Tests} & \textbf{Coverage} \\
+\midrule
+\texttt{curves.py} & 15 & Analytic identities, no-arbitrage rejection, QuantLib \texttt{HazardRateCurve} parity at $10^{-12}$ \\
+\texttt{discount\_curve.py} & 17 & Convention inversions, replication identity, bucket-constant forwards, QuantLib \texttt{DiscountCurve} parity at $10^{-12}$ \\
+\texttt{cds.py} + \texttt{schedule.py} & 33 & Two hand-checked closed forms, credit-triangle convergence, exact-vs-quadrature, QuantLib \texttt{MidPointCdsEngine} within 1bp \\
+\texttt{bootstrap.py} & 21 & Machine-precision repricing, triangularity, failure modes, recovery degeneracy, QuantLib \texttt{PiecewiseFlatHazardRate} parity \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Selected assertions}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=0.2em]
+\item \textbf{Exact integration versus brute force.} The closed-form protection integral is
+compared against a Riemann sum at grid sizes 20k, 200k and 2M. Because the integrand is
+discontinuous at every hazard knot, trapezoid converges slowly --- so the test asserts
+\emph{convergence toward} the closed form rather than agreement at one grid size. That is the
+correct direction of the claim: the closed form is exact and the Riemann sum is the
+approximation.
+\item \textbf{Exact versus midpoint.} The two methods agree to 0.0023bp on a 5Y par spread and
+are asserted \emph{not} identical --- if they were, one implementation would be wrong.
+\item \textbf{Locality.} \texttt{np.array\_equal} on hazards after a 50bp bump to the 10Y
+quote. Bit-for-bit, not approximate.
+\end{itemize}
+
+\subsection{Defects found and corrected}
+
+Documented because the process is part of the artifact.
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.4em]
+\item \textbf{Inverted accrual direction.} An assertion that ACT/360 produces a higher quoted
+rate than ACT/365F failed. ACT/360 yields the \emph{larger} year fraction
+($91/360 = 0.25278$ against $0.24932$), so for identical growth the quoted simple rate is
+\emph{lower}. ``Divide by 360'' feels as though it should shrink the fraction. It does not.
+
+\item \textbf{RPV01 scaled by notional.} The risky annuity was being reported multiplied by
+notional rather than per unit. Mathematically harmless (it cancels in the par spread) but
+against market convention and confusing on output. Corrected to the per-unit figure.
+
+\item \textbf{Wrong maturity convention.} Schedules measured tenor from the \emph{trade date},
+making every contract up to a full quarter too long --- a ``5Y'' maturing 20 Sep 2031 against
+QuantLib's 20 Jun 2031. The CDS2015 convention measures tenor from the \emph{accrual start}
+(the preceding IMM date). This produced a 66bp error in the bootstrapped 1Y hazard.
+
+\item \textbf{Bootstrapping off the dirty par spread.} On a seasoned schedule the annuity
+carries a coupon stub buying no protection. On a 0.84Y contract that stub is 16\% of the
+annuity, inflating $h_1$ by 18bp --- 20\% wrong at the front of the curve. Netting the accrued
+rebate collapsed the QuantLib gap:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+& \textbf{Dirty} & \textbf{Clean} & \textbf{QuantLib} & \textbf{Clean $-$ QL} \\
+\midrule
+1Y  & 110.38 & 92.44  & 92.14  & $+0.31$ bp \\
+3Y  & 162.46 & 158.44 & 158.47 & $-0.03$ bp \\
+10Y & 284.22 & 282.31 & 282.28 & $+0.04$ bp \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\item \textbf{Closure mutation in the bootstrap loop.} The residual function closed over the
+hazard list, which was appended to before the diagnostic re-evaluation --- lengthening the
+array out from under the closure. Caught by 19 simultaneous test failures.
+
+\item \textbf{Clean par spread against dirty mark-to-market.} Introducing the clean par
+spread (defect 4) netted the accrued rebate out of the annuity for $s_{\text{par}}$ but not
+for the MTM, which continued to use the dirty annuity. On a seasoned schedule the identity
+$\text{MTM} = (s_{\text{par}} - s)\,A\,N$ therefore failed by exactly the accrued rebate, and
+pricing \emph{at} the par spread returned $-\text{accrued}$ rather than zero. Invisible to the
+suite because every MTM test used the synthetic \texttt{flat\_schedule}, where
+\texttt{accrued\_fraction()} is zero and the two conventions coincide. Surfaced by a user
+running the engine on a seasoned IMM schedule, not by inspection. Corrected by making
+\texttt{mtm} the clean market value, exposing \texttt{stream\_pv} for the raw cashflow view
+(which jump-to-default correctly nets against, since on default the stub is owed rather than
+rebated), and adding seven regression tests on a deliberately seasoned fixture.
+
+\item \textbf{Incorrect claim about recovery sensitivity.} A draft chart asserted that the
+recovery assumption drove the \emph{ranking}. It does not: with uniform $R$, $h = s/(1-R)$ is
+a monotone transform of the spread and the ordering is invariant. Recovery drives the
+\emph{level}. Caught by running the sensitivity rather than reasoning about it.
+\end{enumerate}
+
+\keypoint{Defects 3, 4 and 6 were each surfaced by a validation step, not by inspection.
+Defect 4 was diagnosed in a single step because the Step 4 day-count decomposition had already
+isolated the accrued-rebate wedge as a named quantity.}
+
+\newpage
+%% ------------------------------------------------------- 8. limitations
+\section{Limitations and Roadmap}
+
+\subsection{Known simplifications}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.3em]
+\item \textbf{No business-day adjustment.} Payment dates should roll Following against a real
+holiday calendar. This moves a handful of cashflows by 1--3 days and is the residual in the
+QuantLib comparisons ($\sim$0.3bp at 1Y, under 0.07bp beyond). Mechanical to add; omitted as a
+scoping choice and stated in the module docstring so the omission is auditable.
+
+\item \textbf{Rates and default assumed independent.} Standard, and wrong in stress. Material
+for distressed names.
+
+\item \textbf{Deterministic recovery.} $R$ is a fixed input, not a distribution, and no
+recovery/default correlation is modelled.
+
+\item \textbf{Running-spread quotation only.} The post-2009 standard contract quotes points
+upfront against a fixed 100bp or 500bp coupon. For distressed names the par-spread
+representation degenerates as the annuity collapses. An upfront bootstrap is the natural next
+addition.
+
+\item \textbf{No curve-shape alternatives.} Piecewise-flat hazards are the only
+parameterisation. The bootstrapped curve is quotes \emph{plus} that assumption.
+\end{enumerate}
+
+\subsection{Roadmap}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.2em]
+\item Points-upfront quotation and conversion to and from par spread.
+\item Bucketed CS01 computed off a full re-bootstrap, exploiting the locality property.
+\item Business-day adjustment against a real calendar.
+\item Senior/subordinated basis, for the capital-structure analysis in Section 6.
+\item Index (CDX) decomposition against single-name constituents.
+\end{enumerate}
+
+\subsection{Reproducing this document}
+
+\begin{lstlisting}[language=bash]
+pip install numpy scipy pandas matplotlib pytest QuantLib
+PYTHONPATH=. python -m pytest tests/ -q          # 79 passed
+jupyter notebook notebooks/bank_credit_analysis.ipynb
+\end{lstlisting}
+
+\vspace{2em}
+\hrule
+\vspace{0.8em}
+{\small\itshape
+All figures in this document are produced by the code in the repository. Bank CDS spreads are
+indicative and supplied as inputs; the discount curve is illustrative. Historical default rates
+should be verified against the current Moody's Annual Default Study before external citation.
+Nothing here is investment advice.}
+
+\end{document}

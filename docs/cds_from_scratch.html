@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Credit Default Swaps, from scratch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F2ED; --card:#FFFDFA; --raise:#FAF7F2;
+  --ink:#161311; --ink2:#4A4340; --ink3:#8B827C;
+  --accent:#0F5C4E; --accent-bg:#E4F0EC; --accent-line:#B8D6CD;
+  --warm:#A8541C; --warm-bg:#FBEEE4;
+  --red:#9C2F26; --red-bg:#F9E7E5;
+  --line:#DED7CE; --hair:#EBE5DC;
+  --disp:'Instrument Serif',Georgia,serif;
+  --body:'Inter',system-ui,-apple-system,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);
+  font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased}
+
+/* ---------- cover ---------- */
+#cover{min-height:100vh;display:flex;flex-direction:column;justify-content:center;
+  padding:40px 24px;max-width:660px;margin:0 auto}
+#cover .kicker{font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--warm);margin-bottom:22px}
+#cover h1{font-family:var(--disp);font-size:clamp(46px,9vw,76px);line-height:.98;
+  font-weight:400;letter-spacing:-.02em;margin-bottom:20px}
+#cover h1 em{font-style:italic;color:var(--accent)}
+#cover .sub{font-size:19px;color:var(--ink2);line-height:1.5;margin-bottom:34px;max-width:30em}
+#cover .meta{display:flex;gap:26px;flex-wrap:wrap;padding:20px 0;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-bottom:30px}
+#cover .meta div{font-size:14px;color:var(--ink3)}
+#cover .meta b{display:block;font-family:var(--mono);font-size:19px;color:var(--ink);font-weight:500}
+.toc{margin-bottom:34px}
+.toc-row{display:flex;gap:14px;padding:9px 0;border-bottom:1px solid var(--hair);font-size:15px}
+.toc-row span:first-child{font-family:var(--mono);font-size:12.5px;color:var(--warm);
+  min-width:22px;padding-top:3px}
+.toc-row span:last-child{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink3)}
+
+/* ---------- shell ---------- */
+#app{display:none}
+.bar{position:sticky;top:0;background:rgba(245,242,237,.94);backdrop-filter:blur(9px);
+  z-index:30;border-bottom:1px solid var(--line)}
+.bar-in{max-width:660px;margin:0 auto;padding:11px 24px}
+.bar-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:9px}
+.chname{font-family:var(--mono);font-size:11.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--warm);font-weight:500}
+.pos{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.chips{display:flex;gap:3px}
+.chip{flex:1;height:3px;background:var(--line);border-radius:2px;cursor:pointer;
+  transition:background .2s}
+.chip.done{background:var(--accent)}
+.chip.now{background:var(--warm)}
+
+main{max-width:660px;margin:0 auto;padding:34px 24px 150px}
+.unit{animation:rise .32s cubic-bezier(.2,.7,.3,1)}
+@keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+
+h2{font-family:var(--disp);font-size:clamp(30px,5.6vw,40px);line-height:1.08;
+  font-weight:400;letter-spacing:-.015em;margin-bottom:20px}
+h2 em{font-style:italic;color:var(--accent)}
+p{margin-bottom:15px;color:var(--ink)}
+p.lead{font-size:18.5px;color:var(--ink2)}
+p:last-child{margin-bottom:0}
+strong{font-weight:600}
+em{font-style:italic}
+.mono{font-family:var(--mono)}
+code{font-family:var(--mono);font-size:.88em;background:var(--raise);
+  padding:2px 6px;border-radius:3px;border:1px solid var(--hair)}
+
+/* formula */
+.fx{font-family:var(--disp);font-size:29px;text-align:center;padding:24px 16px;
+  background:var(--card);border:1px solid var(--line);border-radius:5px;margin:22px 0;
+  letter-spacing:.01em}
+.fx small{font-family:var(--body);font-size:13.5px;color:var(--ink3);
+  display:block;margin-top:9px;letter-spacing:0}
+
+/* interactive */
+.lab{background:var(--card);border:1px solid var(--line);border-radius:5px;
+  padding:22px;margin:22px 0}
+.lab-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:16px}
+.slide-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.slide-row label{font-size:14.5px;color:var(--ink2)}
+.slide-row b{font-family:var(--mono);font-size:17px;color:var(--warm);font-weight:500}
+input[type=range]{width:100%;-webkit-appearance:none;height:4px;background:var(--line);
+  border-radius:2px;margin:8px 0 20px;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:19px;height:19px;
+  background:var(--warm);border-radius:50%;cursor:pointer;border:3px solid var(--card);
+  box-shadow:0 1px 4px rgba(0,0,0,.22)}
+input[type=range]::-moz-range-thumb{width:19px;height:19px;background:var(--warm);
+  border-radius:50%;cursor:pointer;border:3px solid var(--card)}
+
+.hero{text-align:center;padding:8px 0 4px}
+.hero .n{font-family:var(--disp);font-size:54px;line-height:1;color:var(--accent)}
+.hero .c{font-size:13.5px;color:var(--ink3);margin-top:7px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+@media(max-width:480px){.grid2{grid-template-columns:1fr}}
+.stat{background:var(--raise);border:1px solid var(--hair);border-radius:4px;padding:13px 15px}
+.stat .k{font-size:12.5px;color:var(--ink3);margin-bottom:3px}
+.stat .v{font-family:var(--mono);font-size:19px;font-weight:500}
+.stat.hi{background:var(--accent-bg);border-color:var(--accent-line)}
+.stat.hi .v{color:var(--accent)}
+
+table{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0;table-layout:fixed}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink3);font-weight:500;text-align:right;padding:7px 6px;
+  border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+td{padding:8px 6px;border-bottom:1px solid var(--hair);text-align:right;font-family:var(--mono);font-size:13.5px}
+td.txt{font-family:var(--body);font-size:14.5px}
+td.acc{color:var(--accent);font-weight:600}
+tr.tot td{border-top:1.5px solid var(--line);border-bottom:none;font-weight:600;padding-top:10px}
+
+/* prompts */
+.ask{border-top:1px solid var(--line);margin-top:26px;padding-top:22px}
+.ask-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--warm);font-weight:500;margin-bottom:9px}
+.q{font-size:17.5px;font-weight:500;margin-bottom:15px;line-height:1.45}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:flex;gap:11px;align-items:flex-start;padding:13px 15px;background:var(--card);
+  border:1px solid var(--line);border-radius:4px;cursor:pointer;text-align:left;
+  font:inherit;font-size:15.5px;color:inherit;width:100%;transition:border-color .13s,background .13s}
+.opt:hover:not(:disabled){border-color:var(--accent);background:var(--raise)}
+.opt:disabled{cursor:default}
+.opt .kk{font-family:var(--mono);font-size:12.5px;color:var(--ink3);min-width:14px;padding-top:2px}
+.opt.ok{border-color:var(--accent);background:var(--accent-bg);border-width:1.5px}
+.opt.no{border-color:var(--red);background:var(--red-bg);border-width:1.5px}
+
+.numin{display:flex;gap:9px;align-items:center}
+.numin input{font-family:var(--mono);font-size:17px;padding:11px 13px;border:1px solid var(--line);
+  border-radius:4px;width:130px;background:var(--card);color:var(--ink)}
+.numin input:focus{outline:none;border-color:var(--warm)}
+.numin span{font-size:15px;color:var(--ink3)}
+
+textarea{width:100%;height:120px;font-family:var(--body);font-size:15.5px;padding:13px;
+  border:1px solid var(--line);border-radius:4px;background:var(--card);color:var(--ink);
+  resize:vertical;line-height:1.55}
+textarea:focus{outline:none;border-color:var(--warm)}
+
+.resp{margin-top:15px;padding:16px 18px;border-radius:4px;background:var(--accent-bg);
+  border-left:3px solid var(--accent);animation:rise .26s}
+.resp.miss{background:var(--red-bg);border-left-color:var(--red)}
+.resp .v{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  font-weight:600;color:var(--accent);margin-bottom:8px}
+.resp.miss .v{color:var(--red)}
+
+.card-say{background:var(--warm-bg);border:1px solid #E8C9AE;border-radius:5px;
+  padding:17px 19px;margin-top:22px}
+.card-say .v{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--warm);font-weight:600;margin-bottom:9px}
+.card-say p{font-family:var(--disp);font-size:19.5px;line-height:1.36;margin:0}
+
+.aside{background:var(--raise);border-left:2px solid var(--line);padding:13px 16px;
+  margin:20px 0;font-size:14.5px;color:var(--ink2)}
+.aside b{color:var(--ink)}
+
+/* nav */
+.nav{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  margin-top:34px;padding-top:20px;border-top:1px solid var(--line)}
+button.pri{font-family:var(--mono);font-size:12.5px;font-weight:500;letter-spacing:.07em;
+  background:var(--ink);color:var(--paper);border:none;padding:13px 24px;border-radius:3px;
+  cursor:pointer;transition:background .15s}
+button.pri:hover{background:var(--accent)}
+button.pri:disabled{opacity:.3;cursor:not-allowed}
+button.sec{font-family:var(--mono);font-size:12px;background:none;border:1px solid var(--line);
+  color:var(--ink2);padding:11px 18px;border-radius:3px;cursor:pointer}
+button.sec:hover{border-color:var(--ink);color:var(--ink)}
+.keys{font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.05em}
+@media(max-width:560px){.keys{display:none}}
+
+.recap ul{list-style:none;margin:6px 0 0}
+.recap li{padding:11px 0;border-top:1px solid var(--hair);display:flex;gap:12px;font-size:15.5px}
+.recap li b{font-family:var(--mono);font-size:12px;color:var(--accent);padding-top:3px}
+
+.fin h2{margin-bottom:14px}
+.fin .big{font-family:var(--disp);font-size:44px;color:var(--accent);margin:20px 0 6px}
+</style>
+</head>
+<body>
+
+<div id="cover">
+  <div class="kicker">A course from first principles</div>
+  <h1>Credit<br>Default<br><em>Swaps</em></h1>
+  <p class="sub">Start knowing nothing. Finish able to explain what a CDS is, how it's priced,
+  and what your engine does when it turns a market spread into a default probability.</p>
+  <div class="meta">
+    <div><b>7</b>chapters</div>
+    <div><b>53</b>units</div>
+    <div><b>~75</b>minutes</div>
+    <div><b>0</b>prerequisites</div>
+  </div>
+  <div class="toc" id="toc"></div>
+  <div><button class="pri" id="begin">Begin →</button></div>
+</div>
+
+<div id="app">
+  <div class="bar"><div class="bar-in">
+    <div class="bar-top"><span class="chname" id="chn"></span><span class="pos" id="pos"></span></div>
+    <div class="chips" id="chips"></div>
+  </div></div>
+  <main id="stage"></main>
+</div>
+
+<script>
+/* ===================== maths (quarterly, flat curve) ===================== */
+const RF=0.04, FREQ=4, DT=1/FREQ;
+function parSpread(h,R,T){
+  const N=Math.round(T*FREQ); let ann=0,prot=0;
+  for(let i=1;i<=N;i++){ const t=i*DT;
+    ann += DT*Math.exp(-(RF+h)*t); }
+  const c=RF+h;
+  for(let i=0;i<N;i++){ const q=Math.exp(-c*i*DT), e=Math.exp(-c*DT);
+    ann += h*q*(1-e*(1+c*DT))/(c*c); }
+  prot = (1-R)*h/c*(1-Math.exp(-c*T));
+  return {par:prot/ann, ann, prot};
+}
+function solveH(s,R,T){ let lo=0,hi=9;
+  for(let k=0;k<220;k++){ const m=(lo+hi)/2; parSpread(m,R,T).par<s?lo=m:hi=m; }
+  return (lo+hi)/2; }
+const surv=(h,t)=>Math.exp(-h*t);
+const pc=(v,d=2)=>(v*100).toFixed(d)+'%';
+const bp=v=>Math.round(v*1e4);
+const usd=v=>'$'+Math.round(v).toLocaleString('en-US');
+
+/* ============================ curriculum =============================== */
+const CH=[
+{n:'The Idea', t:8, u:[
+
+{h:'Someone lends money. It might not come back.',
+ b:`<p class="lead">Every idea here grows from one sentence, so start with it.</p>
+    <p>A company borrows money by issuing a <strong>bond</strong>. You buy it, you get interest,
+    and at the end you get your money back.</p>
+    <p>Unless the company can't pay. That's <strong>default</strong>, and it's the only risk
+    this entire subject is about.</p>`},
+
+{h:'You can buy insurance against it.',
+ b:`<p>If you own the bond and you're nervous, you find someone willing to take that risk.</p>
+    <p>You pay them a fee every year. If the company defaults, they cover your loss.
+    If it never defaults, they keep your fees and you got nothing.</p>
+    <p>That contract is a <strong>credit default swap</strong>. Car insurance, pointed at a company.</p>`,
+ say:'A CDS is insurance on a company\'s debt. You pay a premium; if the company defaults, you get paid your loss.'},
+
+{h:'Default is not total loss.',
+ b:`<p>Here's the first thing that isn't obvious.</p>
+    <p>When a company defaults, its bonds don't become worthless. There are assets, there's a
+    bankruptcy process, and creditors usually get <em>something</em> back.</p>
+    <p>If a defaulted bond ends up worth 40 cents on the dollar, that 40% is the
+    <strong>recovery rate</strong>. Your actual loss is the other 60%.</p>`,
+ fx:'loss = 1 − recovery',
+ aside:`<b>Why this matters more than it sounds.</b> Recovery is never observed in advance.
+   The market just agrees to assume 40% for ordinary corporate debt. That single assumption
+   runs through everything you will build.`},
+
+{t:'predict', h:'Check yourself.',
+ q:'You insure $10m of a company\'s debt. It defaults, and the bonds settle at 40 cents. How much do you get paid?',
+ o:['$10m — the full notional','$6m — the loss, not the notional','$4m — the recovered amount','Nothing until the bankruptcy concludes'],
+ a:1,
+ w:`<p>Insurance covers your <em>loss</em>, not the whole notional. You still hold bonds worth
+    $4m, so you're paid the missing $6m.</p>
+    <p>This is why recovery appears in every formula. The payout is always
+    <span class="mono">(1 − R) × notional</span>.</p>`},
+
+{h:'What a fair premium looks like.',
+ b:`<p>Now the whole thing, with real arithmetic, over one year.</p>
+    <p>Suppose there's a <strong>5% chance</strong> of default and you'd lose <strong>$60</strong>
+    on every $100 insured.</p>
+    <p>Five percent of the time you pay out $60. The rest of the time, nothing. On average
+    you pay out 5% × $60 = <strong>$3</strong>.</p>
+    <p>So $3 a year is a fair premium. Charge more, you make money. Charge less, you lose it.</p>`,
+ fx:'premium = probability × loss',
+ say:'A fair premium equals the expected loss — the chance of default times the amount you\'d lose.'},
+
+{t:'lab', kind:'oneyear', h:'Move the pieces.',
+ b:`<p>Change the probability and the recovery. Watch the premium follow.</p>`,
+ after:`<p>Two things to notice. Raise the probability and the premium rises in step — they're
+   directly proportional over one year. Raise <em>recovery</em> and the premium falls, because
+   there's less to lose.</p>`},
+
+{t:'predict', h:'Now reverse it.',
+ q:'The market charges $3 a year to insure $100, and you\'d lose $60 in a default. What is the market implying about the default probability?',
+ o:['3%','5%','60%','You cannot tell without more information'],
+ a:1,
+ w:`<p><span class="mono">$3 ÷ $60 = 5%</span>.</p>
+    <p>You just did the thing your engine does. The market quoted a price; you divided by the
+    loss and recovered a probability.</p>
+    <p><strong>That is bootstrapping.</strong> Everything after this point is making that
+    division more careful.</p>`,
+ say:'Bootstrapping means running the pricing backwards: the market gives you a premium, you divide by the loss, and out comes the implied default probability.'},
+
+{t:'recap', h:'Chapter 1 down.',
+ items:[['01','A bond is a loan. Default is the risk it isn\'t repaid.'],
+        ['02','A CDS is insurance against that default.'],
+        ['03','Default isn\'t total loss — recovery means you lose (1 − R).'],
+        ['04','A fair premium equals expected loss: probability × loss.'],
+        ['05','Run it backwards and a premium implies a probability.']]}
+]},
+
+{n:'Time', t:11, u:[
+
+{h:'One year was easy. Five is not.',
+ b:`<p class="lead">This chapter is the one that makes everything else possible.</p>
+    <p>Real CDS contracts run five years, not one. So: if there's a 5% chance of default each
+    year, what's the chance of default over five years?</p>
+    <p>The instinct is 25%. It's wrong, and understanding why is the single most valuable
+    thing in this course.</p>`},
+
+{h:'You can only default once.',
+ b:`<p>To default in year two, a company has to <em>survive year one first</em>. Year two's
+    risk only applies to the companies still standing.</p>
+    <p>So survival <strong>multiplies</strong>:</p>`,
+ fx:'0.95 × 0.95 = 0.9025',
+ b2:`<p>After two years, 90.25% survive — so 9.75% have defaulted. Not 10%.</p>
+    <p>Small gap. But it compounds, and it never lets probability exceed 100%, which
+    straight addition would.</p>`},
+
+{t:'lab', kind:'compound', h:'Watch it compound.',
+ b:`<p>Drag the annual default rate. Compare the two totals at the bottom.</p>`,
+ after:`<p>Push it past 20% and the naive figure sails past 100% — an impossible probability.
+   The compounded one never can. <strong>That's why the engine multiplies.</strong></p>`},
+
+{t:'predict', h:'Check.',
+ q:'A company has a 10% default rate each year. What is the chance it survives all five years?',
+ o:['50%','59%','90%','0.1%'],
+ a:1,
+ w:`<p><span class="mono">0.9⁵ = 0.59</span>. About 59% survive, so 41% have defaulted —
+    noticeably less than the 50% that adding would suggest.</p>`},
+
+{h:'Two different quantities.',
+ b:`<p>That table forced two ideas apart, and confusing them is the classic error.</p>
+    <p><strong>Survival probability</strong> — the chance the company is still alive at a given
+    date. Starts at 1, only falls. It's a probability, so it lives between 0 and 1.</p>
+    <p><strong>Hazard rate</strong> — the rate at which risk arrives, <em>given</em> the company
+    is still alive. It's a speed.</p>`,
+ aside:`<b>The analogy that sticks.</b> Hazard is the speedometer; survival is how much road
+   is left. You can drive at 200 km/h without having travelled 200 km — so a hazard rate above
+   1 is perfectly legal and just means a short expected life.`,
+ say:'Survival probability is the chance of still being alive. The hazard rate is the speed at which that chance gets used up.'},
+
+{t:'predict', h:'Check.',
+ q:'A name has a hazard rate of 3.0. Is something broken?',
+ o:['Yes — a probability can\'t exceed 1','No — it means an expected life of about four months','Yes — hazard rates cap at 1','No — it means a 3% default chance'],
+ a:1,
+ w:`<p>A hazard is a rate, with units of 1/time. 3.0 per year means an expected time to
+    default of one third of a year.</p>
+    <p>If someone says "the hazard is 300%" and you flinch, you're treating a speed like a
+    distance.</p>`},
+
+{h:'Let the steps shrink.',
+ b:`<p>Companies don't wait for December 31st to fail. So instead of yearly steps, take
+    monthly, then daily, then continuous ones.</p>
+    <p>Do that and the compounding table collapses into a single formula:</p>`,
+ fx:'Q(t) = e<sup>−ht</sup><small>survival to time t, at hazard rate h</small>',
+ b2:`<p>Check it: h = 5%, t = 5 gives e<sup>−0.25</sup> = 0.7788. So 22.1% cumulative default,
+    against 22.6% from annual steps. Nearly the same — the gap is just step size.</p>
+    <p><strong>This is the equation at the centre of your engine.</strong> It is the table you
+    just played with, with the steps shrunk to zero.</p>`,
+ say:'Survival equals e to the minus h t. It\'s just compounding with the time steps shrunk to nothing.'},
+
+{t:'lab', kind:'expo', h:'The curve behind the formula.',
+ b:`<p>Move the hazard and watch survival decay.</p>`,
+ after:`<p>Notice it never touches zero and never rises. Both properties come free from the
+   exponential — which is exactly why the engine works in hazard space rather than modelling
+   probabilities directly.</p>`},
+
+{t:'recap', h:'Chapter 2 down. This was the hard one.',
+ items:[['01','Probabilities compound, they don\'t add — you can only default once.'],
+        ['02','Survival probability: the chance of still being alive. Falls from 1.'],
+        ['03','Hazard rate: the speed risk arrives at. Can exceed 1.'],
+        ['04','Q(t) = e^(−ht) is compounding taken to continuous time.'],
+        ['05','The exponential keeps survival between 0 and 1 automatically.']]}
+]},
+
+{n:'The Contract', t:8, u:[
+
+{h:'What is actually written down.',
+ b:`<p class="lead">Six terms. These are the words people use on a desk.</p>`,
+ table:'anatomy'},
+
+{h:'Why it\'s quoted as a rate.',
+ b:`<p>A CDS premium is quoted in <strong>basis points per year</strong> — hundredths of a
+    percent. Citigroup at 85bp means 0.85% of notional, annually.</p>
+    <p>On $10m that's $85,000 a year, paid quarterly, so roughly $21,250 a quarter.</p>
+    <p>Quoting as a rate rather than a price means you can compare a $10m trade with a $500m
+    trade directly. The rate is the credit view; the notional is just size.</p>`,
+ say:'A spread is quoted in basis points per year, so 85bp on $10m is $85,000 a year, paid quarterly.'},
+
+{t:'lab', kind:'quote', h:'Get a feel for the numbers.',
+ b:`<p>Slide the spread. Ranges worth knowing are marked underneath.</p>`,
+ after:`<p>Investment grade banks sit in the 50–150bp range. Above roughly 1,000bp the market
+   stops quoting a running spread at all and switches to an upfront payment, because the name
+   is distressed enough that "per year" stops being meaningful.</p>`},
+
+{h:'Two sides, opposite views.',
+ b:`<p>Every CDS has a buyer and a seller of protection.</p>
+    <p>The <strong>buyer</strong> pays the premium and gets paid on default. They are
+    <em>short</em> the credit — they profit if things get worse.</p>
+    <p>The <strong>seller</strong> collects the premium and pays out on default. They are
+    <em>long</em> the credit, economically much like owning the bond.</p>`,
+ aside:`<b>Why anyone sells.</b> Selling protection is how you take credit risk without
+   putting up the cash to buy a bond. That's the whole appeal — and the reason CDS notionals
+   grew far larger than the bonds they reference.`},
+
+{t:'predict', h:'Check.',
+ q:'You bought protection on a company at 85bp. Its spread widens to 150bp. What has happened to your position?',
+ o:['It lost money — you\'re paying above market','It gained — you locked in cheap protection on a name that got riskier','Nothing until default','It depends on the recovery rate'],
+ a:1,
+ w:`<p>You pay 85bp for something now worth 150bp. You can sell that protection on for more
+    than you're paying, so the position gained.</p>
+    <p>Protection buyers profit from bad news. It's the closest thing in credit to shorting
+    a stock.</p>`,
+ say:'Buying protection is short credit — you gain when spreads widen. Selling protection is long credit, economically similar to owning the bond.'},
+
+{t:'recap', h:'Chapter 3 down.',
+ items:[['01','Six terms: entity, notional, coupon, maturity, credit event, recovery.'],
+        ['02','Spreads are quoted in basis points per year, paid quarterly.'],
+        ['03','Buying protection is short credit; selling is long credit.'],
+        ['04','IG names sit around 50–150bp; distressed names switch to upfront quoting.']]}
+]},
+
+{n:'Pricing', t:14, u:[
+
+{h:'Two more complications, then you can price it.',
+ b:`<p class="lead">You already know premium = probability × loss. Real contracts add two
+    wrinkles.</p>
+    <p><strong>One.</strong> Money later is worth less than money now. A payout in year four
+    has to be discounted back to today.</p>
+    <p><strong>Two.</strong> You stop paying premiums the moment the company defaults. So each
+    future coupon must be weighted by the chance you're still alive to pay it.</p>`},
+
+{h:'Discounting, in one line.',
+ b:`<p>If interest rates are 4%, a dollar in five years is worth about 82 cents today —
+    because 82 cents invested at 4% grows back to a dollar.</p>
+    <p>That shrink factor is the <strong>discount factor</strong>, and it has the same shape
+    as survival:</p>`,
+ fx:'D(t) = e<sup>−rt</sup><small>value today of $1 paid at time t</small>',
+ aside:`<b>Notice the symmetry.</b> Survival and discounting are the same mathematical object
+   — an exponential decay. That's not a coincidence, and it's why your engine uses one base
+   class for both curves.`},
+
+{h:'The premium leg.',
+ b:`<p>Twenty quarterly coupons over five years. Each one is worth its size, times the chance
+    you're alive to pay it, times the discount factor.</p>`,
+ fx:'Σ  0.25 × Q(t) × D(t)',
+ b2:`<p>Add all twenty and you get a number around 4.3. That number is the
+    <strong>risky annuity</strong>, and it is the single most confusing quantity in the
+    engine — so here is exactly what it means.</p>
+    <p>It's the present value of paying <em>1 unit of spread per year</em>, survival-weighted.
+    It converts a rate into a price. Multiply it by your spread and you get what the premium
+    stream is worth.</p>`,
+ say:'The risky annuity is the present value of one unit of spread, weighted by survival. It converts a rate into a price.'},
+
+{h:'The protection leg.',
+ b:`<p>The other side. For each small slice of time: the chance of defaulting in that slice,
+    times the loss, discounted back.</p>`,
+ fx:'(1 − R) × Σ  P(default in slice) × D(t)',
+ b2:`<p>Add up every slice from today to maturity and you have the present value of the
+    payout you might receive.</p>`},
+
+{t:'lab', kind:'legs', h:'Watch them balance.',
+ b:`<p>Drag the hazard rate. Both legs move — and there's exactly one point where the
+    contract is fairly priced.</p>`,
+ after:`<p>Look at what happens at high hazards: the protection leg grows, but the annuity
+   <em>shrinks</em>, because the company probably doesn't survive to pay the later coupons.
+   Both effects push the fair spread up.</p>`},
+
+{h:'The par spread.',
+ b:`<p>The fair premium is the one that makes the two legs equal. Set them equal, divide,
+    and everything cancels except:</p>`,
+ fx:'spread = protection leg ÷ risky annuity',
+ b2:`<p>That's the whole pricing formula. No iteration, no simulation — a single division.</p>
+    <p>Worth noting because the <em>reverse</em> problem does need searching. Going from
+    hazard to spread is division. Going from spread to hazard requires hunting.</p>`,
+ say:'The par spread is the protection leg divided by the risky annuity. Pricing is one division; bootstrapping is the search that reverses it.'},
+
+{t:'num', h:'Do it yourself.',
+ q:'A protection leg is worth $452,000. The risky annuity is 4.31 on $10m notional. What is the par spread, in basis points?',
+ ans:105, tol:6, unit:'bp',
+ w:`<p><span class="mono">452,000 ÷ (4.31 × 10,000,000) = 0.0105</span>, which is 105bp.</p>
+    <p>That's the arithmetic your engine performs after building both legs. The hard part was
+    the legs, not this.</p>`},
+
+{h:'A shortcut worth memorising.',
+ b:`<p>Strip out discounting and quarterly timing and the pricing collapses to something you
+    can do in your head:</p>`,
+ fx:'spread ≈ hazard × (1 − recovery)',
+ b2:`<p>This is the <strong>credit triangle</strong>. At 40% recovery, an 85bp spread implies
+    a hazard of roughly 85 ÷ 0.6 = 142bp.</p>
+    <p>It's an approximation for real contracts — but it becomes <em>exact</em> if premium is
+    paid continuously. Use it as a sanity check: if your engine returns something far from it,
+    something is wrong.</p>`,
+ say:'The credit triangle says spread equals hazard times one minus recovery. It\'s exact for continuously-paid premium and a good sanity check otherwise.'},
+
+{t:'predict', h:'Check.',
+ q:'A name trades at 300bp. Assuming 40% recovery, roughly what hazard rate does that imply?',
+ o:['180bp','300bp','500bp','750bp'],
+ a:2,
+ w:`<p><span class="mono">300 ÷ 0.6 = 500bp</span>.</p>
+    <p>The hazard is always <em>higher</em> than the spread, because you only lose the
+    unrecovered portion. It takes more default risk to justify the same premium.</p>`},
+
+{t:'recap', h:'Chapter 4 down. You can now price one.',
+ items:[['01','Money later is worth less: D(t) = e^(−rt).'],
+        ['02','Premium leg: coupons weighted by survival and discounted.'],
+        ['03','The risky annuity converts a rate into a price. Around 4.3 for a 5-year.'],
+        ['04','Protection leg: loss × default chance × discount, summed.'],
+        ['05','Par spread = protection ÷ annuity. One division.'],
+        ['06','Credit triangle: spread ≈ hazard × (1 − recovery).']]}
+]},
+
+{n:'Bootstrapping', t:12, u:[
+
+{h:'Now run the machine backwards.',
+ b:`<p class="lead">Everything so far went one way: assume a hazard, compute the spread.</p>
+    <p>In real life you have the opposite. The market quotes 85bp for Citi. Nobody tells you
+    the default probability — that's the thing you want.</p>
+    <p>So you search. Try a hazard, compute the spread, compare it to 85bp, adjust, repeat.
+    That search is <strong>bootstrapping</strong>.</p>`,
+ say:'Bootstrapping searches for the hazard rate whose fair spread matches the market quote.'},
+
+{t:'lab', kind:'boot', h:'Do the search by hand.',
+ b:`<p>Target: 85bp. Move the hazard until the computed spread hits it.</p>`,
+ after:`<p>You landed near 141bp — and notice that's almost exactly 85 ÷ 0.6, the credit
+   triangle. Your engine does this same search with bisection, halving the interval about 200
+   times until it's accurate to the last decimal a computer can hold.</p>`},
+
+{h:'One quote gives one number.',
+ b:`<p>Important limitation, and it's the one people overclaim.</p>
+    <p>A single 5-year quote gives you a single hazard rate. That means the curve is
+    <strong>flat</strong> — the model assumes risk arrives at the same speed in year one as in
+    year five.</p>
+    <p>You have no evidence for that. It's what happens when you have one number and need a
+    whole curve.</p>`,
+ aside:`<b>Say this unprompted.</b> "With one quote per name the curve is flat by construction,
+   so everything away from the five-year point is assumption rather than market data." Stating
+   your own limitation before someone finds it is what separates an analyst from a script.`},
+
+{h:'Five quotes give a shape.',
+ b:`<p>Liquid names quote at 1, 3, 5, 7 and 10 years. Now you can find five hazard rates —
+    one per period — and the curve has structure.</p>
+    <p>The engine solves them <strong>in order</strong>, and the reason is simple: a 3-year
+    contract tells you nothing about years 3 to 5. It only covers its own window.</p>
+    <p>So the 1Y quote fixes the first bucket. The 3Y quote fixes years 1–3, given what the
+    1Y already settled. And onward.</p>`,
+ table:'boot5'},
+
+{t:'predict', h:'The classic trap.',
+ q:'That table shows a 5Y hazard of 240bp from a 105bp quote. What does 240bp describe?',
+ o:['Average default intensity over years 0–5','Marginal intensity over years 3–5 only','The five-year cumulative default probability','The spread grossed up for recovery'],
+ a:1,
+ w:`<p>Marginal, not average. It's what years 3–5 add, <em>given</em> what the 1Y and 3Y
+    quotes already established.</p>
+    <p>Same relationship as a forward rate versus a zero rate. Calling it "the 5-year default
+    intensity" is the most common error people make with bootstrapped curves.</p>`,
+ say:'Bootstrapped hazards are forward quantities. The 5-year hazard covers years three to five, not an average from zero.'},
+
+{h:'When it refuses to solve.',
+ b:`<p>Sometimes no hazard rate works, and that's information rather than a bug.</p>
+    <p><strong>Quote too low.</strong> If the 3Y is far below the 1Y, matching it needs a
+    <em>negative</em> hazard — meaning survival would rise. A negative default probability.
+    Impossible, and a free-money trade if anyone quoted it.</p>
+    <p><strong>Quote too high.</strong> There's a ceiling: the premium can't exceed the
+    maximum possible loss. Above it, no amount of default risk justifies the price.</p>
+    <p>Your engine raises a named error for each, tells you which tenor, and gives the bound.</p>`,
+ say:'If no non-negative hazard reproduces a quote, the quote set contains an arbitrage — the engine names the tenor and the bound rather than returning nonsense.'},
+
+{t:'recap', h:'Chapter 5 down.',
+ items:[['01','Bootstrapping searches for the hazard matching a market quote.'],
+        ['02','One quote gives one hazard — a flat curve, by assumption.'],
+        ['03','Five quotes give five hazards, solved in order.'],
+        ['04','Each solves its own window only, which is why order works.'],
+        ['05','Bootstrapped hazards are forward, not average.'],
+        ['06','Unsolvable quotes mean arbitrage, not solver failure.']]}
+]},
+
+{n:'Reading It', t:12, u:[
+
+{h:'Recovery: the assumption everything rests on.',
+ b:`<p>Forty percent is a market convention, not a measurement. Nobody observed it.</p>
+    <p>And a spread pins down <em>expected loss</em> — hazard × (1 − recovery) — not the hazard
+    alone. Change recovery and the implied hazard changes to compensate, repricing the same
+    quote perfectly.</p>
+    <p>So which number do you trust?</p>`},
+
+{t:'lab', kind:'rank', h:'The answer, live.',
+ b:`<p>Five real bank spreads. Drag recovery across its whole range and watch the table.</p>`,
+ after:`<p>Every number moved. The order never did.</p>
+   <p>That's your defence. Because recovery hits every name identically, it's a monotone
+   transformation of the spread — it can move your levels but not your conclusion.</p>`,
+ say:'Recovery moves the implied probability levels but, applied uniformly, leaves the ranking across names completely unchanged.'},
+
+{h:'These are prices, not forecasts.',
+ b:`<p>Your five banks imply five-year default probabilities around 5–7%. History says
+    similarly-rated issuers default about 0.5% of the time over five years.</p>
+    <p>Ten times higher. That gap is <strong>not an error.</strong></p>
+    <p>CDS-implied probabilities are <em>risk-neutral</em>. They contain a risk premium —
+    compensation for bearing default risk, for illiquidity, and for the fact that bank defaults
+    tend to arrive when everything else is going wrong too.</p>`,
+ aside:`<b>Never say this:</b> "The market thinks Citi has a 6.9% chance of defaulting."<br>
+   <b>Say this:</b> "Citi's CDS implies a 6.9% risk-neutral default probability, roughly ten
+   times historical rates for comparable credits."`,
+ say:'These are risk-neutral probabilities, not forecasts. They run about ten times historical default rates, and that gap is the risk premium.'},
+
+{h:'Two risk numbers that aren\'t substitutes.',
+ b:`<p><strong>CS01</strong> — what you gain or lose if spreads move one basis point. Small,
+    smooth, and hedgeable with an index.</p>
+    <p><strong>JTD</strong> — jump to default. What happens if the company fails <em>today</em>.
+    Not a sensitivity. A cliff.</p>
+    <p>For a typical 5-year position, JTD is roughly <strong>1,400 times</strong> CS01.</p>`},
+
+{t:'predict', h:'What that ratio means.',
+ q:'A desk is perfectly hedged on CS01 using a credit index. What risk remains untouched?',
+ o:['Interest rate risk','The loss if one specific name defaults','Recovery assumptions','None — CS01 neutrality covers it'],
+ a:1,
+ w:`<p>An index hedge neutralises spreads moving <em>together</em>. It does nothing about one
+    name failing, because the index is diversified across a hundred names and you're
+    concentrated in one.</p>
+    <p>That's the 1,400× in practice: a book can look flat and be destroyed by a single default.
+    Desks limit both, separately.</p>`,
+ say:'CS01 is a smooth sensitivity to spread moves; JTD is the discontinuous loss if the name defaults today. An index hedge flattens the first and leaves the second untouched.'},
+
+{h:'The three caveats. Every time.',
+ b:`<p>Whatever analysis you produce, these travel with it:</p>
+    <p><strong>One.</strong> Recovery is an assumption — it moves levels, not rankings.</p>
+    <p><strong>Two.</strong> These are risk-neutral, roughly ten times historical default rates.</p>
+    <p><strong>Three.</strong> With one quote per name, the curve is flat by construction.</p>
+    <p>Volunteering limitations is not weakness. It's the clearest signal that you understand
+    what you built.</p>`},
+
+{t:'recap', h:'Chapter 6 down.',
+ items:[['01','Recovery is a convention; it moves levels, not rankings.'],
+        ['02','Implied probabilities are risk-neutral, ~10× historical rates.'],
+        ['03','CS01 is smooth and hedgeable; JTD is a cliff and isn\'t.'],
+        ['04','State the three caveats before anyone asks for them.']]}
+]},
+
+{n:'Own It', t:10, u:[
+
+{h:'The last step is producing it cold.',
+ b:`<p class="lead">Recognising a right answer among four is far easier than generating one
+    with someone waiting.</p>
+    <p>Four questions. Type your answer <em>first</em>, then compare. Typing matters — thinking
+    "I know this" is how you discover in an interview that you don't.</p>`},
+
+{t:'explain', h:'Question 1',
+ q:'What is a credit default swap? Explain it to someone with no finance background.',
+ model:`It's insurance on a company's debt. You pay a premium every quarter; if the company
+   fails to pay its debts, whoever sold you the protection covers your loss. If it never
+   defaults, you paid for nothing — same as any insurance.`},
+
+{t:'explain', h:'Question 2',
+ q:'What does your engine actually do?',
+ model:`It takes the market price of that insurance and works backwards to the default
+   probability the price implies. Pricing forwards is a division — protection leg over risky
+   annuity. My engine reverses it: it searches for the hazard rate whose fair spread matches
+   the quoted spread.`},
+
+{t:'explain', h:'Question 3',
+ q:'You assume 40% recovery. Doesn\'t that make the whole thing arbitrary?',
+ model:`It affects the levels but not the conclusion. A spread identifies expected loss —
+   hazard times one minus recovery — not the hazard alone, so changing recovery changes every
+   implied probability. But I apply the same recovery to every name, which makes it a monotone
+   transformation of the spread. The ranking is invariant. I state the ordering with confidence
+   and the levels with a caveat.`},
+
+{t:'explain', h:'Question 4',
+ q:'Why build this when QuantLib already exists?',
+ model:`To be able to defend every line. QuantLib gives you a number; deriving it yourself lets
+   you say why it's right and where it breaks. I validated against QuantLib to 1e-12 as an
+   independent check, and documented six bugs I found in my own implementation with diagnoses.`},
+
+{t:'fin'}
+]}
+];
+
+/* ============================== runtime ================================= */
+let C=0,U=0;
+const $=i=>document.getElementById(i);
+const K=['A','B','C','D'];
+const flat=[];CH.forEach((c,ci)=>c.u.forEach((u,ui)=>flat.push([ci,ui])));
+
+$('toc').innerHTML=CH.map((c,i)=>
+ `<div class="toc-row"><span>${String(i+1).padStart(2,'0')}</span><span>${c.n}</span><span>${c.t} min</span></div>`).join('');
+$('begin').onclick=()=>{$('cover').style.display='none';$('app').style.display='block';render();};
+
+function bar(){
+  $('chn').textContent=`${C+1}. ${CH[C].n}`;
+  $('pos').textContent=`${U+1} / ${CH[C].u.length}`;
+  $('chips').innerHTML=CH.map((_,i)=>
+   `<div class="chip ${i<C?'done':''} ${i===C?'now':''}" data-c="${i}"></div>`).join('');
+  $('chips').querySelectorAll('.chip').forEach(d=>d.onclick=()=>{C=+d.dataset.c;U=0;render();});
+}
+
+function tbl(kind){
+  if(kind==='anatomy') return `<table>
+   <tr><th>Term</th><th style="text-align:left">What it means</th></tr>
+   <tr><td class="txt">Reference entity</td><td class="txt" style="text-align:left">The company insured. Citigroup.</td></tr>
+   <tr><td class="txt">Notional</td><td class="txt" style="text-align:left">How much. $10m.</td></tr>
+   <tr><td class="txt">Coupon</td><td class="txt" style="text-align:left">Premium per year, in bp. Paid quarterly.</td></tr>
+   <tr><td class="txt">Maturity</td><td class="txt" style="text-align:left">How long protection lasts. Five years is standard.</td></tr>
+   <tr><td class="txt">Credit event</td><td class="txt" style="text-align:left">What counts as default. Legally defined.</td></tr>
+   <tr><td class="txt">Recovery</td><td class="txt" style="text-align:left">What a defaulted bond is worth. Assumed 40%.</td></tr></table>`;
+  const q=[55,82,105,118,130],h=[92,158,240,263,282],t=[1,3,5,7,10];
+  return `<table><tr><th>Tenor</th><th>Quote</th><th>Hazard</th><th style="text-align:right">Covers</th></tr>`+
+   t.map((x,i)=>`<tr><td>${x}Y</td><td>${q[i]} bp</td><td class="acc">${h[i]} bp</td>
+   <td style="color:var(--ink3)">yr ${i?t[i-1]:0}–${x}</td></tr>`).join('')+`</table>`;
+}
+
+function render(){
+  bar();
+  const u=CH[C].u[U], last=C===CH.length-1&&U===CH[C].u.length-1;
+  let x='';
+  const T=u.t||'idea';
+
+  if(T==='idea'){
+    x=`${u.b||''}${u.fx?`<div class="fx">${u.fx}</div>`:''}${u.b2||''}
+       ${u.table?tbl(u.table):''}${u.aside?`<div class="aside">${u.aside}</div>`:''}`;
+  }
+  else if(T==='lab'){ x=`${u.b||''}<div class="lab"><div class="lab-h">Try it</div><div id="lab"></div></div>${u.after||''}`; }
+  else if(T==='predict'){
+    x=`<div class="ask"><div class="ask-h">Make your call</div><p class="q">${u.q}</p>
+       <div class="opts">${u.o.map((o,i)=>`<button class="opt" data-i="${i}"><span class="kk">${K[i]}</span><span>${o}</span></button>`).join('')}</div>
+       <div id="rv"></div></div>`;
+  }
+  else if(T==='num'){
+    x=`<div class="ask"><div class="ask-h">Compute it</div><p class="q">${u.q}</p>
+       <div class="numin"><input id="ni" placeholder="—" inputmode="decimal"><span>${u.unit}</span>
+       <button class="sec" id="nb">Check</button></div><div id="rv"></div></div>`;
+  }
+  else if(T==='explain'){
+    x=`<div class="ask"><div class="ask-h">Say it in your own words</div><p class="q">${u.q}</p>
+       <textarea id="ta" placeholder="Rough is fine. Producing it is the point, not polishing it."></textarea>
+       <div style="margin-top:11px"><button class="sec" id="eb">Compare with a model answer</button></div>
+       <div id="rv"></div></div>`;
+  }
+  else if(T==='recap'){
+    x=`<div class="recap"><ul>${u.items.map(i=>`<li><b>${i[0]}</b><span>${i[1]}</span></li>`).join('')}</ul></div>`;
+  }
+  else if(T==='fin'){
+    x=`<div class="fin"><p class="lead">You started this not knowing what a bond was for.</p>
+       <div class="big">That's the course.</div>
+       <p>You can now explain what a CDS is, why probabilities compound, what a hazard rate
+       measures, how both legs are priced, what bootstrapping does, and which three caveats
+       travel with every number you produce.</p>
+       <div class="aside"><b>One thing left, and it's the one that counts.</b> Say the answer
+       to Question 1 out loud — to a person, or a voice memo — with this closed. Under sixty
+       seconds, no stalling. That's the difference between recognising it and owning it.</div>
+       <div style="margin-top:20px"><button class="sec" id="rs">Start again</button></div></div>`;
+  }
+
+  $('stage').innerHTML=`<div class="unit">${u.h?`<h2>${u.h}</h2>`:''}${x}
+    ${u.say?`<div class="card-say"><div class="v">Say this out loud</div><p>${u.say}</p></div>`:''}
+    <div class="nav"><button class="sec" id="pv" ${C===0&&U===0?'disabled':''}>← Back</button>
+    <span class="keys">← → to move</span>
+    <button class="pri" id="nx">${last?'Finish':'Continue →'}</button></div></div>`;
+
+  wire(u,T);
+  $('pv').onclick=prev; $('nx').onclick=()=>{ if(!last) nxt(); };
+  window.scrollTo({top:0,behavior:'instant'});
+}
+function nxt(){ U++; if(U>=CH[C].u.length){ if(C<CH.length-1){C++;U=0;} else U--; } render(); }
+function prev(){ U--; if(U<0){ if(C>0){C--;U=CH[C].u.length-1;} else U=0; } render(); }
+
+function wire(u,T){
+  if(T==='predict'){
+    $('stage').querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+      const i=+b.dataset.i, ok=i===u.a;
+      $('stage').querySelectorAll('.opt').forEach(o=>{o.disabled=true;
+        if(+o.dataset.i===u.a)o.classList.add('ok');
+        else if(+o.dataset.i===i)o.classList.add('no');});
+      $('rv').innerHTML=`<div class="resp ${ok?'':'miss'}"><div class="v">${ok?'Correct':'Not quite'}</div>${u.w}</div>`;
+    });
+  }
+  if(T==='num'){
+    const go=()=>{ const v=parseFloat($('ni').value);
+      const ok=!isNaN(v)&&Math.abs(v-u.ans)<=u.tol;
+      $('rv').innerHTML=`<div class="resp ${ok?'':'miss'}"><div class="v">${ok?'Correct':(isNaN(v)?'Have a go first':'Not quite')}</div>${u.w}</div>`;};
+    $('nb').onclick=go; $('ni').onkeydown=e=>{if(e.key==='Enter')go();};
+  }
+  if(T==='explain'){
+    $('eb').onclick=()=>{ const mine=$('ta').value.trim();
+      $('rv').innerHTML=`<div class="resp"><div class="v">A model answer</div><p>${u.model}</p></div>`+
+        (mine.length<30?`<div class="aside">You left that blank or nearly. Go back and type it —
+         reading a model answer you didn't attempt teaches almost nothing.</div>`:
+        `<div class="aside">Compare on <b>content</b>, not wording. Same two or three points? Then you have it.</div>`);};
+  }
+  if(T==='fin') $('rs').onclick=()=>{C=0;U=0;render();};
+  if(T==='lab') labs[u.kind]();
+}
+
+/* ------------------------------- labs ---------------------------------- */
+const L=()=>$('lab');
+const slider=(id,lab,min,max,val,step,unit)=>
+ `<div class="slide-row"><label>${lab}</label><b id="${id}o">${val}${unit}</b></div>
+  <input type="range" id="${id}" min="${min}" max="${max}" value="${val}" step="${step}">`;
+
+const labs={
+ oneyear(){
+  L().innerHTML=slider('p','Chance of default',1,30,5,1,'%')+slider('r','Recovery',0,80,40,10,'%')+
+   `<div class="grid2"><div class="stat"><div class="k">You'd lose</div><div class="v" id="a"></div></div>
+    <div class="stat hi"><div class="k">Fair premium / year</div><div class="v" id="b"></div></div></div>
+    <div style="margin-top:13px;font-family:var(--mono);font-size:14px;color:var(--ink2);text-align:center" id="c"></div>`;
+  const f=()=>{const p=+$('p').value/100,r=+$('r').value/100,loss=100*(1-r),prem=p*loss;
+   $('po').textContent=$('p').value+'%';$('ro').textContent=$('r').value+'%';
+   $('a').textContent='$'+loss.toFixed(0);$('b').textContent='$'+prem.toFixed(2);
+   $('c').textContent=`${$('p').value}% × $${loss.toFixed(0)} = $${prem.toFixed(2)}`;};
+  $('p').oninput=f;$('r').oninput=f;f();
+ },
+ compound(){
+  L().innerHTML=slider('h','Default risk per year',1,40,5,1,'%')+`<div id="t"></div>
+   <div class="grid2" style="margin-top:13px"><div class="stat"><div class="k">Naive: add it up</div><div class="v" id="a"></div></div>
+   <div class="stat hi"><div class="k">Real: compounded</div><div class="v" id="b"></div></div></div>`;
+  const f=()=>{const p=+$('h').value/100;$('ho').textContent=$('h').value+'%';
+   let S=1,r='';for(let y=1;y<=5;y++){const P=S;S*=(1-p);
+    r+=`<tr><td style="color:var(--ink3)">${y}</td><td>${(P*100).toFixed(2)}% × ${((1-p)*100).toFixed(0)}%</td>
+        <td>${(S*100).toFixed(2)}%</td><td class="acc">${((1-S)*100).toFixed(2)}%</td></tr>`;}
+   $('t').innerHTML=`<table><tr><th>Year</th><th>Compounds as</th><th>Alive</th><th>Defaulted</th></tr>${r}</table>`;
+   $('a').textContent=Math.min(p*5*100,999).toFixed(1)+'%';
+   $('b').textContent=((1-Math.pow(1-p,5))*100).toFixed(1)+'%';};
+  $('h').oninput=f;f();
+ },
+ expo(){
+  L().innerHTML=slider('h','Hazard rate',10,600,143,1,' bp')+
+   `<div class="hero"><div class="n" id="a"></div><div class="c">still alive after 5 years</div></div>
+    <div id="t" style="margin-top:14px"></div>`;
+  const f=()=>{const h=+$('h').value*1e-4;$('ho').textContent=$('h').value+' bp';
+   $('a').textContent=pc(surv(h,5),1);
+   let r='';[1,2,3,5,10].forEach(t=>{r+=`<tr><td style="color:var(--ink3)">${t}Y</td>
+    <td>e^(−${(h).toFixed(4)}×${t})</td><td>${pc(surv(h,t))}</td><td class="acc">${pc(1-surv(h,t))}</td></tr>`;});
+   $('t').innerHTML=`<table><tr><th>Horizon</th><th>Formula</th><th>Survive</th><th>Default</th></tr>${r}</table>`;};
+  $('h').oninput=f;f();
+ },
+ quote(){
+  L().innerHTML=slider('s','Spread',20,1200,85,5,' bp')+
+   `<div class="grid2"><div class="stat"><div class="k">Per year on $10m</div><div class="v" id="a"></div></div>
+    <div class="stat"><div class="k">Each quarter</div><div class="v" id="b"></div></div></div>
+    <div class="stat hi" style="margin-top:11px"><div class="k" id="c"></div><div class="v" id="d"></div></div>`;
+  const f=()=>{const s=+$('s').value;$('so').textContent=s+' bp';
+   $('a').textContent=usd(s*1e-4*1e7);$('b').textContent=usd(s*1e-4*1e7/4);
+   const band=s<80?'Strong investment grade':s<180?'Investment grade bank':s<400?'Crossover':s<1000?'High yield':'Distressed — market quotes upfront instead';
+   $('c').textContent='Where this sits';$('d').style.fontSize='15px';$('d').textContent=band;};
+  $('s').oninput=f;f();
+ },
+ legs(){
+  L().innerHTML=slider('h','Hazard rate',10,600,143,1,' bp')+
+   `<div class="grid2"><div class="stat"><div class="k">Protection leg</div><div class="v" id="a"></div></div>
+    <div class="stat"><div class="k">Risky annuity</div><div class="v" id="b"></div></div></div>
+    <div class="stat hi" style="margin-top:11px"><div class="k">Fair spread = protection ÷ annuity</div><div class="v" id="c"></div></div>`;
+  const f=()=>{const h=+$('h').value*1e-4,r=parSpread(h,0.4,5);$('ho').textContent=$('h').value+' bp';
+   $('a').textContent=usd(r.prot*1e7);$('b').textContent=r.ann.toFixed(3);
+   $('c').textContent=bp(r.par)+' bp';};
+  $('h').oninput=f;f();
+ },
+ boot(){
+  L().innerHTML=`<div class="hero"><div class="n" id="a"></div><div class="c">target is 85 bp</div></div>`+
+   slider('h','Your hazard guess',10,400,60,1,' bp')+`<div id="m" style="text-align:center;font-size:15px;color:var(--ink2)"></div>`;
+  const f=()=>{const h=+$('h').value*1e-4,s=bp(parSpread(h,0.4,5).par);$('ho').textContent=$('h').value+' bp';
+   $('a').textContent=s+' bp';const d=s-85;
+   $('a').style.color=Math.abs(d)<=1?'var(--accent)':'var(--ink)';
+   $('m').textContent=Math.abs(d)<=1?'That\u2019s it — the market\u2019s 85bp implies this hazard.':
+     d<0?`${-d}bp too low — raise the hazard`:`${d}bp too high — lower it`;};
+  $('h').oninput=f;f();
+ },
+ rank(){
+  L().innerHTML=slider('r','Recovery',0,80,40,5,'%')+`<div id="t"></div>`;
+  const B=[['JPMorgan',58],['Bank of America',63],['U.S. Bancorp',67],['Wells Fargo',72],['Citigroup',85]];
+  const f=()=>{const R=+$('r').value/100;$('ro').textContent=$('r').value+'%';
+   const rows=B.map(([n,s])=>{const h=solveH(s*1e-4,R,5);return[n,s,h,1-surv(h,5)];});
+   $('t').innerHTML=`<table><tr><th>#</th><th style="text-align:left">Name</th><th>Spread</th><th>Hazard</th><th>5Y PD</th></tr>`+
+    rows.map((x,i)=>`<tr><td style="color:var(--ink3)">${i+1}</td><td class="txt" style="text-align:left">${x[0]}</td>
+    <td>${x[1]} bp</td><td>${bp(x[2])} bp</td><td class="acc">${pc(x[3])}</td></tr>`).join('')+`</table>`;};
+  $('r').oninput=f;f();
+ }
+};
+
+document.addEventListener('keydown',e=>{
+  if($('app').style.display!=='block')return;
+  if(/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;
+  if(e.key==='ArrowRight')nxt(); if(e.key==='ArrowLeft')prev();
+  const u=CH[C].u[U];
+  if(u.t==='predict'){const i=K.indexOf(e.key.toUpperCase());
+    if(i>-1&&i<u.o.length)$('stage').querySelectorAll('.opt')[i]?.click();}
+});
+</script>
+</body>
+</html>

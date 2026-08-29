@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>creditlib course</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F0F3F6; --card:#FFF; --ink:#111A24; --dim:#5A6B7D; --faint:#8A9AAB;
+  --navy:#17395B; --amber:#B0680A; --amberbg:#FDF3E2; --teal:#0D6B51; --tealbg:#E2F1EC;
+  --red:#A5322A; --redbg:#FAE7E5; --line:#D3DBE3; --soft:#E5EBF0;
+  --disp:'Fraunces',Georgia,serif; --body:'Inter',system-ui,sans-serif; --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6}
+.wrap{max-width:760px;margin:0 auto;padding:18px 18px 130px}
+
+/* map */
+.map{position:sticky;top:0;background:var(--bg);padding:10px 0 12px;z-index:10;border-bottom:1px solid var(--line)}
+.maprow{display:flex;gap:4px;align-items:center}
+.lv{flex:1;height:6px;background:var(--soft);border-radius:2px;position:relative;cursor:pointer}
+.lv.done{background:var(--teal)} .lv.now{background:var(--amber)}
+.maplab{display:flex;justify-content:space-between;margin-top:7px;font-family:var(--mono);
+  font-size:11px;color:var(--dim);letter-spacing:.03em}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:26px 28px;margin-top:16px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--amber);font-weight:600;display:flex;justify-content:space-between}
+h1{font-family:var(--disp);font-size:28px;line-height:1.16;margin:8px 0 16px;font-weight:600;letter-spacing:-.01em}
+p{margin:0 0 13px}
+p:last-child{margin-bottom:0}
+.lead{font-size:17px}
+strong{font-weight:600}
+code{font-family:var(--mono);font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:2px}
+
+/* interactive blocks */
+.play{background:#F7F9FB;border:1px solid var(--line);border-radius:4px;padding:18px;margin:18px 0}
+.play .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;margin-bottom:12px}
+.ctl{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:14px}
+.ctl b{font-family:var(--mono);color:var(--amber);font-size:15px}
+input[type=range]{width:100%;height:5px;-webkit-appearance:none;background:var(--line);border-radius:3px;margin:2px 0 14px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;background:var(--amber);border-radius:50%;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:17px;height:17px;background:var(--amber);border:none;border-radius:50%;cursor:pointer}
+.readout{font-family:var(--mono);font-size:14px;background:#101A24;color:#DCE5EE;padding:13px 15px;
+  border-radius:3px;line-height:1.75;overflow-x:auto}
+.readout .k{color:#8A9AAB} .readout .v{color:#E8B563;font-weight:600}
+.readout .g{color:#5FBF9B} .readout .r{color:#E5837C}
+.big{font-family:var(--disp);font-size:34px;font-weight:600;color:var(--navy);text-align:center;margin:6px 0}
+.bigsub{text-align:center;color:var(--dim);font-size:13.5px;margin-bottom:4px}
+
+input[type=text]{font-family:var(--mono);font-size:14px;padding:9px 11px;border:1px solid var(--line);
+  border-radius:3px;width:100%;background:#fff;color:var(--ink)}
+input[type=text]:focus{outline:none;border-color:var(--amber)}
+textarea{width:100%;height:110px;font-family:var(--body);font-size:15px;padding:12px;
+  border:1px solid var(--line);border-radius:3px;resize:vertical;line-height:1.55}
+textarea:focus{outline:none;border-color:var(--amber)}
+
+/* choices */
+.opts{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.opt{display:flex;gap:10px;padding:12px 14px;background:#fff;border:1px solid var(--line);
+  border-radius:3px;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%;transition:border-color .12s}
+.opt:hover:not(:disabled){border-color:var(--navy)}
+.opt.right{border-color:var(--teal);background:var(--tealbg);border-width:1.5px}
+.opt.wrong{border-color:var(--red);background:var(--redbg);border-width:1.5px}
+.opt .k{font-family:var(--mono);font-weight:600;color:var(--faint);min-width:14px}
+
+.answer{background:var(--tealbg);border-left:3px solid var(--teal);padding:14px 16px;
+  border-radius:0 3px 3px 0;margin-top:14px;animation:in .25s}
+.answer.miss{background:var(--redbg);border-left-color:var(--red)}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.say{border:1.5px solid var(--amber);background:var(--amberbg);padding:15px 17px;border-radius:3px;margin-top:16px}
+.say .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--amber);font-weight:600;margin-bottom:7px}
+.say p{font-family:var(--disp);font-size:17px;line-height:1.45;margin:0}
+
+.tip{background:var(--soft);border-radius:3px;padding:12px 15px;font-size:14px;color:var(--dim);margin:14px 0}
+
+button.go{font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.06em;
+  background:var(--navy);color:#fff;border:none;padding:11px 20px;border-radius:2px;cursor:pointer}
+button.go:hover{background:#0F2942}
+button.go:disabled{opacity:.35;cursor:not-allowed}
+button.ghost{font-family:var(--mono);font-size:12px;background:none;border:1px solid var(--line);
+  color:var(--dim);padding:9px 15px;border-radius:2px;cursor:pointer}
+button.ghost:hover{border-color:var(--ink);color:var(--ink)}
+
+.nav{display:flex;justify-content:space-between;gap:10px;margin-top:20px;align-items:center}
+.time{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.04em}
+
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;margin:12px 0}
+th{text-align:right;padding:6px 8px;color:var(--faint);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+td{padding:7px 8px;border-bottom:1px solid var(--soft);text-align:right}
+td.hl{color:var(--amber);font-weight:600}
+
+@media(max-width:600px){
+  .wrap{padding:14px 12px 120px}
+  .card{padding:20px 17px}
+  h1{font-size:23px}
+  .big{font-size:28px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="map">
+    <div class="maprow" id="maprow"></div>
+    <div class="maplab"><span id="lvname"></span><span id="lvpos"></span></div>
+  </div>
+  <div id="stage"></div>
+</div>
+
+<script>
+"use strict";
+/* ================= validated engine (identical maths to the Python) ====== */
+
+/* ============================================================================
+   Pricing core — direct port of creditlib. Validated on load against exact
+   values from the Python engine (see SELFTEST). If the badge is not green,
+   do not trust the numbers on this page.
+   ========================================================================= */
+const DAY = 86400000;
+const ymd = s => { const [y,m,d]=s.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); };
+const act365 = (a,b) => (b-a)/DAY/365;
+const act360 = (a,b) => (b-a)/DAY/360;
+const IMM_M = [2,5,8,11];                       // 0-indexed Mar/Jun/Sep/Dec
+
+function prevIMM(d){
+  for(const y of [d.getUTCFullYear(), d.getUTCFullYear()-1])
+    for(const m of [...IMM_M].reverse()){
+      const c = new Date(Date.UTC(y,m,20));
+      if(c <= d) return c;
+    }
+}
+function nextIMM(d){
+  for(const y of [d.getUTCFullYear(), d.getUTCFullYear()+1])
+    for(const m of IMM_M){
+      const c = new Date(Date.UTC(y,m,20));
+      if(c >= d) return c;
+    }
+}
+/* CDS2015: tenor runs from the ACCRUAL START (previous IMM), not the trade date. */
+function makeSchedule(trade, tenorYears){
+  const start = prevIMM(trade);
+  const months = Math.round(tenorYears*12);
+  let y = start.getUTCFullYear() + Math.floor((start.getUTCMonth()+months)/12);
+  let m = (start.getUTCMonth()+months)%12;
+  let maturity = new Date(Date.UTC(y,m,20));
+  if(!IMM_M.includes(maturity.getUTCMonth())) maturity = nextIMM(maturity);
+
+  const edges=[maturity]; let cur=maturity;
+  while(cur > start){
+    let yy=cur.getUTCFullYear(), mm=cur.getUTCMonth()-3;
+    while(mm<0){mm+=12;yy--;}
+    cur=new Date(Date.UTC(yy,mm,20)); edges.push(cur);
+  }
+  edges.sort((a,b)=>a-b); edges[0]=start;
+
+  const tS=[],tE=[],dl=[];
+  for(let k=0;k<edges.length-1;k++){
+    tS.push(act365(trade,edges[k])); tE.push(act365(trade,edges[k+1]));
+    dl.push(act360(edges[k],edges[k+1]));
+  }
+  let accr=0;
+  for(let k=0;k<edges.length-1;k++)
+    if(edges[k]<=trade && trade<edges[k+1]) accr=act360(edges[k],trade);
+  return {tS,tE,dl,accr,T:tE[tE.length-1],maturity};
+}
+
+/* piecewise-flat: value(t) = exp(-∫rate) */
+function mkCurve(times,rates){
+  const kn=[0,...times], cum=[0];
+  for(let k=0;k<rates.length;k++) cum.push(cum[k]+rates[k]*(kn[k+1]-kn[k]));
+  const idx=t=>{let i=0;while(i<times.length&&t>times[i]+1e-15)i++;return Math.min(i,rates.length-1);};
+  return {times,rates,
+    integral:t=>{const i=idx(t);return cum[i]+rates[i]*(t-kn[i]);},
+    rateAt:t=>rates[idx(t)],
+    value:t=>Math.exp(-(cum[idx(t)]+rates[idx(t)]*(t-kn[idx(t)])))};
+}
+/* discount curve: log-linear on DFs == piecewise-flat instantaneous forwards */
+function mkDisc(times,zeros){
+  const lg=times.map((t,i)=>-zeros[i]*t), kn=[0,...times], lgf=[0,...lg];
+  const fwd=[]; for(let k=0;k<times.length;k++) fwd.push(-(lgf[k+1]-lgf[k])/(kn[k+1]-kn[k]));
+  const idx=t=>{let i=0;while(i<times.length&&t>times[i]+1e-15)i++;return Math.min(i,fwd.length-1);};
+  return {times,fwd,
+    df:t=>{const i=idx(t);return Math.exp(lgf[i]-fwd[i]*(t-kn[i]));},
+    instFwd:t=>fwd[idx(t)]};
+}
+
+const TINY=1e-12;
+function mergedGrid(a,b,dc,cc){
+  const s=new Set([a,b]);
+  for(const t of dc.times) if(t>a+TINY&&t<b-TINY) s.add(t);
+  for(const t of cc.times) if(t>a+TINY&&t<b-TINY) s.add(t);
+  return [...s].sort((x,y)=>x-y);
+}
+/* ∫ D h Q dt = (h/(f+h))[DQ(a) - DQ(b)] on each flat sub-interval */
+function protLeg(dc,cc,sc,R){
+  const t0=Math.max(0,sc.tS[0]), T=sc.T; if(T<=t0) return 0;
+  let tot=0; const g=mergedGrid(t0,T,dc,cc);
+  for(let k=0;k<g.length-1;k++){
+    const lo=g[k],hi=g[k+1],mid=(lo+hi)/2;
+    const f=dc.instFwd(mid),h=cc.rateAt(mid); if(h<=0) continue;
+    const c=f+h, dqL=dc.df(lo)*cc.value(lo), dqH=dc.df(hi)*cc.value(hi);
+    tot += Math.abs(c)<TINY ? h*(hi-lo)*dqL : (h/c)*(dqL-dqH);
+  }
+  return (1-R)*tot;
+}
+/* ∫ (t-p) D h Q dt, exact */
+function accrInt(dc,cc,a,b,p){
+  if(b<=a) return 0; let tot=0; const g=mergedGrid(a,b,dc,cc);
+  for(let k=0;k<g.length-1;k++){
+    const lo=g[k],hi=g[k+1],mid=(lo+hi)/2;
+    const f=dc.instFwd(mid),h=cc.rateAt(mid); if(h<=0) continue;
+    const c=f+h,L=hi-lo,dqL=dc.df(lo)*cc.value(lo);
+    if(Math.abs(c)<TINY) tot += h*dqL*(0.5*L*L+(lo-p)*L);
+    else { const e=Math.exp(-c*L);
+      tot += h*dqL*((1-e*(1+c*L))/(c*c) + (lo-p)*(1-e)/c); }
+  }
+  return tot;
+}
+function annuity(dc,cc,sc){
+  const t0=Math.max(0,sc.tS[0]); let cp=0,ac=0;
+  for(let k=0;k<sc.tE.length;k++){
+    const a=sc.tS[k],b=sc.tE[k]; if(b<=t0) continue;
+    cp += sc.dl[k]*dc.df(b)*cc.value(b);
+    const lo=Math.max(a,t0), span=b-a; if(span<=0) continue;
+    ac += (sc.dl[k]/span)*accrInt(dc,cc,lo,b,a);
+  }
+  return cp+ac;
+}
+const parSpread=(dc,cc,sc,R,clean=true)=>protLeg(dc,cc,sc,R)/(annuity(dc,cc,sc)-(clean?sc.accr:0));
+
+class BootErr extends Error{constructor(m,tenor,bound){super(m);this.tenor=tenor;this.bound=bound;}}
+
+function bootstrap(quotes,dc,R,trade){
+  const tenors=Object.keys(quotes).map(Number).sort((a,b)=>a-b);
+  const scheds=tenors.map(t=>makeSchedule(trade,t));
+  const knots=scheds.map(s=>s.T), hz=[];
+  for(let k=0;k<tenors.length;k++){
+    const s=quotes[tenors[k]], sc=scheds[k];
+    const phi=h=>{
+      const cc=mkCurve(knots.slice(0,k+1),[...hz,h]);
+      return protLeg(dc,cc,sc,R) - s*(annuity(dc,cc,sc)-sc.accr);
+    };
+    if(phi(0)>0){
+      const cc0=mkCurve(knots.slice(0,k+1),[...hz,0]);
+      const floor=parSpread(dc,cc0,sc,R);
+      throw new BootErr(`${tenors[k]}Y at ${(s*1e4).toFixed(1)}bp is below the `+
+        `${(floor*1e4).toFixed(1)}bp floor set by the shorter quotes. Reproducing it needs a `+
+        `negative forward hazard — a negative forward default probability.`,tenors[k],floor*1e4);
+    }
+    let hi=Math.max(2*s/(1-R),1e-4);
+    while(phi(hi)<0){ hi*=2;
+      if(hi>20){ const cc=mkCurve(knots.slice(0,k+1),[...hz,20]);
+        throw new BootErr(`${tenors[k]}Y at ${(s*1e4).toFixed(0)}bp exceeds the `+
+          `${(parSpread(dc,cc,sc,R)*1e4).toFixed(0)}bp certain-default ceiling at R=${(R*100).toFixed(0)}%. `+
+          `No non-negative hazard prices protection above the maximum possible loss.`,
+          tenors[k],parSpread(dc,cc,sc,R)*1e4); } }
+    let lo=0; for(let n=0;n<300;n++){const m=(lo+hi)/2; (phi(m)<0?lo=m:hi=m);}   // bisection to machine eps
+    hz.push((lo+hi)/2);
+  }
+  const curve=mkCurve(knots,hz);
+  const repriced=scheds.map(sc=>parSpread(dc,curve,sc,R));
+  const err=Math.max(...repriced.map((r,k)=>Math.abs(r/quotes[tenors[k]]-1)));
+  return {curve,tenors,knots,hz,scheds,repriced,err,
+          survival:knots.map(t=>curve.value(t))};
+}
+
+function riskSet(dc,cc,sc,R,N,coupon){
+  const ann=annuity(dc,cc,sc), clean=ann-sc.accr;
+  const prot=protLeg(dc,cc,sc,R)*N;              // protLeg is PER UNIT notional
+  const mtm=prot-coupon*clean*N;                 // clean mark = quoted upfront
+  const stream=prot-coupon*ann*N;                // raw cashflow PV, used for JTD
+  const accrued=N*coupon*sc.accr;
+  const par=prot/(clean*N);
+
+  // CS01: solve the parallel hazard shift that lifts the par spread by 1bp,
+  // then reprice. Matches creditlib's method="reprice" rather than the
+  // credit-triangle approximation.
+  const shifted=d=>mkCurve(cc.times,cc.rates.map(x=>Math.max(x+d,0)));
+  const target=par+1e-4;
+  let lo=0, hi=Math.max(1e-4/(1-R)*5,1e-4);
+  while(parSpread(dc,shifted(hi),sc,R)<target && hi<5) hi*=2;
+  for(let n=0;n<200;n++){const m=(lo+hi)/2;(parSpread(dc,shifted(m),sc,R)<target?lo=m:hi=m);}
+  const bc=shifted((lo+hi)/2);
+  const cs01=(protLeg(dc,bc,sc,R)*N-coupon*(annuity(dc,bc,sc)-sc.accr)*N)-mtm;
+
+  const dcUp=mkDisc(dc.times,dc.times.map(t=>-Math.log(dc.df(t))/t+1e-4));
+  const irdv01=(protLeg(dcUp,cc,sc,R)*N-coupon*(annuity(dcUp,cc,sc)-sc.accr)*N)-mtm;
+
+  const jtd=N*(1-R)-accrued-stream;
+  return {mtm,stream,par,rpv01:ann,rpv01clean:clean,cs01,irdv01,jtd,accrued};
+}
+
+
+/* ========================================================================= */
+
+const T=[0.25,0.5,1,2,3,5,7,10], Z=[.0430,.0421,.0402,.0381,.0374,.0372,.0378,.0390];
+const DC=mkDisc(T,Z), TRADE=ymd('2026-08-17');
+/* one call: spread in bp -> everything */
+function quick(bp,R=0.40){
+  const b=bootstrap({5:bp*1e-4},DC,R,TRADE);
+  const sc=makeSchedule(TRADE,5);
+  return {h:b.hz[0], pd1:1-b.curve.value(1), pd5:1-b.curve.value(5), pd10:1-b.curve.value(10),
+          curve:b.curve, risk:riskSet(DC,b.curve,sc,R,1e7,0.01), err:b.err};
+}
+const pct=(v,d=2)=>(v*100).toFixed(d)+'%';
+const cash=v=>v.toLocaleString('en-US',{maximumFractionDigits:0});
+
+/* ============================ course content ============================ */
+const LEVELS=[
+{name:'Orientation', mins:2, steps:[
+ {t:'teach', h:'What this actually is',
+  b:`<p class="lead">One idea, then we start clicking.</p>
+     <p>You built a tool that answers one question: <strong>given what the market charges to insure a company's debt, how likely does the market think that company is to default?</strong></p>
+     <p>That's it. Everything else is machinery serving that question.</p>`,
+  say:'My engine takes the market price of credit insurance and works backwards to the default probability implied by that price.'},
+
+ {t:'teach', h:'The thing to get right first',
+  b:`<p>Your engine has <strong>no data feed.</strong> No Bloomberg, no API, no database.</p>
+     <p>You type the numbers in. That's not a gap — a pricing library shouldn't have a data vendor built into it.</p>
+     <p>It's the first question you'll get asked, so it's the first thing we're nailing down.</p>`,
+  say:"There's no feed — I input the quotes. In production they'd come from Markit or Bloomberg. The library takes them as an input, so swapping in a live feed doesn't touch the pricing."},
+
+ {t:'mc', h:'Quick check', q:'Where do the spreads come from?',
+  o:['A live market data API','You type them in','Scraped from public filings','Generated by the model'], a:1,
+  w:`<p>Right. And say it without hedging — then add where they <em>would</em> come from in production. That turns an apparent gap into evidence you know the architecture.</p>`}
+]},
+
+{name:'Run it', mins:6, steps:[
+ {t:'teach', h:'Before any theory — just use it',
+  b:`<p>You're going to run an analysis right now. No background needed.</p>
+     <p>A CDS spread is the annual cost of insuring a company's debt, in basis points. 100bp = 1% per year.</p>
+     <p>Citigroup trades around 85bp. Drag the slider and watch what falls out.</p>`},
+
+ {t:'slider', h:'Your first analysis', min:20, max:900, val:85, step:1,
+  lab:'5-year CDS spread', unit:'bp',
+  b:`<p>Move it. Everything below is computed live by the same engine that passes 86 tests.</p>`,
+  after:`<p>Two things worth noticing as you drag:</p>
+    <p>The cost and the default probability move together, but <strong>not proportionally</strong> — doubling the spread does not double the probability. That's the exponential in the maths.</p>
+    <p>At very wide spreads the probability starts flattening toward 100%. It can't exceed it, and the model won't let it.</p>`},
+
+ {t:'mc', h:'Check', q:'You widen a name from 85bp to 170bp — double. What happens to its 5-year default probability?',
+  o:['It exactly doubles','It roughly doubles but slightly less','It quadruples','It stays the same'], a:1,
+  w:`<p>Survival is <code>exp(−h·t)</code>, so probability compounds rather than scaling linearly. At small spreads it's nearly double; the gap widens as spreads get large.</p>
+     <p>Try it on the slider above — 85bp gives about 6.9%, 170bp about 13.3%. Less than double.</p>`},
+
+ {t:'teach', h:'That was the whole workflow',
+  b:`<p>Spread in → default probability out. You just did the thing the engine does.</p>
+     <p>Everything from here is (a) reading the rest of the output, and (b) understanding why it's right.</p>`,
+  say:'You give it a spread, it gives you the default probability the market is implying at that price.'}
+]},
+
+{name:'Read output', mins:8, steps:[
+ {t:'teach', h:'The columns, one at a time',
+  b:`<p>Here's the real output for Citigroup at 85bp. Six numbers. We'll take them one by one.</p>`,
+  table:'cols'},
+
+ {t:'teach', h:'Hazard rate — the one that looks wrong',
+  b:`<p>The spread is 85bp but the hazard is <strong>143bp</strong>. That looks like an error. It isn't.</p>
+     <p>The spread is what you <em>pay</em>. The hazard is the <em>default intensity</em> — and you only lose money on the part that isn't recovered.</p>
+     <p>If a defaulted bond recovers 40 cents, you lose 60. So the intensity has to be higher than the spread to produce the same expected loss: <code>85 ÷ 0.60 = 142</code>.</p>`,
+  say:'The hazard rate is the spread grossed up for recovery. You only lose the unrecovered portion, so the intensity is higher than the premium.'},
+
+ {t:'slider', h:'See it move', min:0, max:80, val:40, step:5,
+  lab:'Recovery assumption', unit:'%', mode:'rec',
+  b:`<p>Spread fixed at 85bp. Drag recovery and watch the hazard.</p>`,
+  after:`<p>Higher recovery → smaller loss per default → the market's 85bp must imply <strong>more</strong> defaults to justify the same premium.</p>
+    <p>This is the single most important caveat in the whole engine, and it's next.</p>`},
+
+ {t:'mc', h:'The big one', q:'You run the same five banks at 40% recovery and again at 20%. What changes?',
+  o:['Nothing — recovery only affects the payout','The default probabilities change but the ranking does not','The ranking reverses','The quotes stop repricing correctly'], a:1,
+  w:`<p>Both reprice perfectly. The probabilities move a lot — Citi goes from 6.9% to 5.2%.</p>
+     <p>But every name gets the same treatment, so <strong>the order never changes.</strong></p>
+     <p>This is what makes your analysis defensible: recovery is an assumption nobody observes, and your <em>ranking</em> doesn't depend on it. Only the levels do.</p>`,
+  say:"Spreads pin down expected loss, not the default rate on its own. Recovery moves my probability levels but with a uniform assumption the ranking across names is invariant."}
+]},
+
+{name:'How it works', mins:10, steps:[
+ {t:'teach', h:'Two words you need',
+  b:`<p><strong>Survival probability</strong> — the chance the company is still alive at some date. Starts at 100%, only falls.</p>
+     <p><strong>Hazard rate</strong> — the chance of defaulting in the next instant, <em>given</em> it has survived so far.</p>
+     <p>Analogy that sticks: hazard is speed, survival is how much road is left. Drive faster, road disappears quicker.</p>`,
+  say:'Survival probability is the chance of still being alive. The hazard rate is the speed at which that chance is being used up.'},
+
+ {t:'mc', h:'Check', q:'A name has a hazard rate of 3.0. Is that broken?',
+  o:['Yes — probability cannot exceed 1','No — it means an expected life of about four months','Yes — hazard rates are capped at 1','No — it means a 3% default probability'], a:1,
+  w:`<p>A hazard is a <em>rate</em>, not a probability. Units of 1/time. 3.0 means an expected time to default of a third of a year.</p>
+     <p>Speed can be 200 km/h. That doesn't mean you've driven 200 km.</p>`},
+
+ {t:'teach', h:'Bootstrapping = running it backwards',
+  b:`<p>The word sounds technical. The idea is one sentence.</p>
+     <p><strong>Forwards:</strong> assume a default probability → compute the fair premium.</p>
+     <p><strong>Backwards:</strong> observe the premium the market charges → solve for the default probability that makes it fair.</p>
+     <p>Backwards is what your engine does. That's bootstrapping.</p>`,
+  say:'Bootstrapping runs the pricer backwards — from the premium the market charges, it recovers the default probability the market must be assuming.'},
+
+ {t:'teach', h:'Why five quotes give five numbers',
+  b:`<p>When you have quotes at 1, 3, 5, 7 and 10 years, the engine solves them <strong>one at a time, in order.</strong></p>
+     <p>The reason is simple: a 5-year contract can't tell you anything about years 5 to 10. It only covers its own window.</p>
+     <p>So the 1Y quote fixes the first bucket. The 3Y quote fixes years 1–3, given what 1Y already said. And so on.</p>`,
+  table:'boot',
+  after:`<p>Look at the hazard column: 92, 158, 240, 263, 282. Each one is the <strong>marginal</strong> intensity for its own window — not an average from year zero.</p>`,
+  say:"Each quote only covers its own window, so the system solves one unknown at a time in sequence. Bumping the 10-year quote can't change the 1-year hazard."},
+
+ {t:'mc', h:'The classic trap', q:'The 5Y hazard reads 240bp. What does it describe?',
+  o:['Average default intensity over years 0–5','Marginal intensity over years 3–5 only','The 5-year cumulative default probability','The spread grossed up for recovery over 5 years'], a:1,
+  w:`<p>Marginal, not average. Same idea as a forward rate versus a zero rate.</p>
+     <p>The 5Y quote tells you what years 3–5 add, <em>given</em> what the 1Y and 3Y quotes already established.</p>
+     <p>Calling it "the 5-year default intensity" is the most common mistake people make with bootstrapped curves.</p>`,
+  say:'Bootstrapped hazards are forward quantities. The 5-year hazard covers years three to five, not an average over the whole period.'}
+]},
+
+{name:'Risk numbers', mins:6, steps:[
+ {t:'teach', h:'Four numbers, two that matter',
+  b:`<p>Your engine outputs four risk measures. Two are routine, two tell a story.</p>`,
+  table:'risk'},
+
+ {t:'teach', h:'CS01 vs JTD',
+  b:`<p><strong>CS01</strong> — what you make or lose if spreads move 1bp. Small, smooth, hedgeable.</p>
+     <p><strong>JTD</strong> — what you make or lose if the company defaults <em>today</em>. Not a sensitivity. A cliff.</p>
+     <p>In your output, JTD is about <strong>1,400 times</strong> CS01.</p>`},
+
+ {t:'mc', h:'What that ratio means', q:'A desk is fully hedged on CS01 using a credit index. What is untouched?',
+  o:['Interest rate risk','The loss if one specific name defaults','Recovery assumptions on the index','Nothing — CS01 neutrality covers it'], a:1,
+  w:`<p>An index hedge neutralises spreads moving together. It does nothing about <em>one</em> name defaulting, because the index is spread across a hundred names and you're concentrated in one.</p>
+     <p>That's the ~1,400× in practice: a book can look flat and still be destroyed by a single default.</p>`,
+  say:'CS01 is a smooth sensitivity to spread moves; JTD is the discontinuous loss if the name defaults today. An index hedge flattens the first and leaves the second untouched.'},
+
+ {t:'teach', h:'One caveat that stops you overclaiming',
+  b:`<p>Your five banks imply 5-year default probabilities of roughly 5–7%. Historical default rates for similarly-rated issuers are around 0.5%.</p>
+     <p>Ten times higher. That is <strong>not an error.</strong></p>
+     <p>These are prices, not forecasts. The gap is the risk premium — what investors demand for bearing default risk, illiquidity, and the fact that bank defaults arrive when everything else is going wrong too.</p>`,
+  say:"These are risk-neutral probabilities, not forecasts. They run about ten times historical default rates, and that gap is the risk premium."}
+]},
+
+{name:'Your analysis', mins:8, steps:[
+ {t:'teach', h:'Now do one from scratch',
+  b:`<p>Three steps, every time:</p>
+     <p><strong>1.</strong> Get spreads. From a terminal, a research note, a colleague, your own credit work.<br>
+        <strong>2.</strong> Enter them. Paste into <code>desk.html</code>, or in Python: <code>compare({"Name": 58, ...})</code>.<br>
+        <strong>3.</strong> Read the ranking, state the caveats, export.</p>
+     <p>That's the entire workflow. Try it below with names of your choosing.</p>`},
+
+ {t:'free', h:'Enter your own', b:`<p>Type any names and spreads. One per line, name then number.</p>`},
+
+ {t:'teach', h:'The three caveats to state every time',
+  b:`<p>Whatever you produce, these three sentences go with it:</p>
+     <p><strong>1.</strong> Recovery is an assumption, not a quote — it moves the levels, not the ranking.<br>
+        <strong>2.</strong> These are risk-neutral, roughly 10× historical default rates.<br>
+        <strong>3.</strong> If you only have a 5Y quote per name, the curve is flat by construction — everything away from 5Y is assumption.</p>
+     <p>Stating limitations unprompted is what separates an analyst from someone running a script.</p>`,
+  say:'Recovery is an assumption that moves levels not rankings; these are risk-neutral not actuarial; and with one quote per name the curve is flat by construction.'}
+]},
+
+{name:'Explain it', mins:10, steps:[
+ {t:'teach', h:'The last step is the real one',
+  b:`<p>Recognising a right answer among four options is much easier than producing one cold.</p>
+     <p>Four questions. Type your own answer <em>first</em>, then compare. Typing matters — thinking "I know this" is how you find out in an interview that you don't.</p>`},
+
+ {t:'explain', h:'Question 1', q:'What does your CDS engine do? No jargon — explain it to someone outside finance.',
+  model:`It takes the market price of insurance on a company's debt and works backwards to the default probability that price implies. You give it what the market charges; it tells you what the market must believe.`},
+
+ {t:'explain', h:'Question 2', q:'Where does it get its data?',
+  model:`It doesn't have a data feed — I input the quotes. In production they'd come from Markit or Bloomberg CDSW. The library takes them as an argument, so swapping in a live source is a data-layer change and doesn't touch the pricing code.`},
+
+ {t:'explain', h:'Question 3', q:'You assume 40% recovery. Doesn\'t that make the whole analysis arbitrary?',
+  model:`It affects the levels but not the conclusion. A spread identifies expected loss — hazard times one minus recovery — not the hazard alone. So changing recovery changes every implied probability. But because I apply the same recovery to every name, it's a monotone transformation of the spread, and the ranking is invariant. I state the ordering with confidence and the levels with a caveat.`},
+
+ {t:'explain', h:'Question 4', q:'Why build this when QuantLib already exists?',
+  model:`To be able to defend every line. QuantLib gives you a number; deriving it yourself lets you say why it's right and where it breaks. I validated against QuantLib to 1e-12 as an independent check, and the write-up documents six bugs I found in my own implementation, with diagnoses.`},
+
+ {t:'done'}
+]}
+];
+
+/* ============================= runtime ================================= */
+let L=0,S=0; const seen={};
+const $=id=>document.getElementById(id);
+const stage=$('stage');
+const KEYS=['A','B','C','D'];
+
+function drawMap(){
+  $('maprow').innerHTML=LEVELS.map((_,k)=>
+    `<div class="lv ${k<L?'done':''} ${k===L?'now':''}" data-l="${k}"></div>`).join('');
+  $('maprow').querySelectorAll('.lv').forEach(d=>d.onclick=()=>{L=+d.dataset.l;S=0;render();});
+  $('lvname').textContent=`${L+1}. ${LEVELS[L].name}`;
+  $('lvpos').textContent=`${S+1} of ${LEVELS[L].steps.length} · ~${LEVELS[L].mins} min`;
+}
+
+function tableHTML(kind){
+  if(kind==='cols'){
+    const q=quick(85);
+    return `<table><tr><th>Output</th><th>Value</th><th>Plain English</th></tr>
+    <tr><td>spread</td><td class="hl">85 bp</td><td style="text-align:left">what you pay per year</td></tr>
+    <tr><td>hazard</td><td class="hl">${(q.h*1e4).toFixed(0)} bp</td><td style="text-align:left">default intensity</td></tr>
+    <tr><td>1Y PD</td><td>${pct(q.pd1)}</td><td style="text-align:left">chance of default within 1 year</td></tr>
+    <tr><td>5Y PD</td><td class="hl">${pct(q.pd5)}</td><td style="text-align:left">within 5 years</td></tr>
+    <tr><td>10Y PD</td><td>${pct(q.pd10)}</td><td style="text-align:left">within 10 years</td></tr>
+    <tr><td>reprice err</td><td>${q.err.toExponential(0)}</td><td style="text-align:left">the engine checking itself</td></tr></table>`;
+  }
+  if(kind==='boot'){
+    const b=bootstrap({1:.0055,3:.0082,5:.0105,7:.0118,10:.0130},DC,0.40,TRADE);
+    return `<table><tr><th>Tenor</th><th>Quote</th><th>Hazard</th><th>Covers</th></tr>`+
+      b.tenors.map((t,k)=>`<tr><td>${t}Y</td><td>${(b.hz[k]?[55,82,105,118,130][k]:'')} bp</td>
+        <td class="hl">${(b.hz[k]*1e4).toFixed(0)} bp</td>
+        <td style="text-align:left">years ${k?b.tenors[k-1]:0}–${t}</td></tr>`).join('')+`</table>`;
+  }
+  const q=quick(105);
+  return `<table><tr><th>Measure</th><th>Value</th><th>Meaning</th></tr>
+  <tr><td>CS01</td><td class="hl">${cash(q.risk.cs01)}</td><td style="text-align:left">P&amp;L if spreads widen 1bp</td></tr>
+  <tr><td>IR DV01</td><td>${cash(q.risk.irdv01)}</td><td style="text-align:left">P&amp;L if rates move 1bp — tiny</td></tr>
+  <tr><td>MTM</td><td>${cash(q.risk.mtm)}</td><td style="text-align:left">value of the position today</td></tr>
+  <tr><td>JTD</td><td class="hl">${cash(q.risk.jtd)}</td><td style="text-align:left">P&amp;L if it defaults <em>today</em></td></tr></table>`;
+}
+
+function render(){
+  drawMap();
+  const st=LEVELS[L].steps[S];
+  const key=`${L}.${S}`;
+  let body='';
+
+  if(st.t==='teach'){
+    body=`${st.b||''}${st.table?tableHTML(st.table):''}${st.after||''}`;
+  }
+  else if(st.t==='slider'){
+    body=`${st.b||''}<div class="play"><div class="lab">${st.lab}</div>
+      <div class="ctl"><span></span><b id="sv"></b></div>
+      <input type="range" id="sl" min="${st.min}" max="${st.max}" value="${st.val}" step="${st.step}">
+      <div id="sout"></div></div>${st.after||''}`;
+  }
+  else if(st.t==='mc'){
+    body=`<p><strong>${st.q}</strong></p><div class="opts">${
+      st.o.map((o,k)=>`<button class="opt" data-k="${k}"><span class="k">${KEYS[k]}</span><span>${o}</span></button>`).join('')
+    }</div><div id="mcout"></div>`;
+  }
+  else if(st.t==='free'){
+    body=`${st.b}<div class="play"><div class="lab">your names</div>
+      <textarea id="fin" style="font-family:var(--mono);font-size:13px;height:96px">Acme Bank, 62
+Beta Financial, 140
+Gamma Holdings, 410</textarea>
+      <div style="margin-top:9px"><button class="go" id="frun">Analyse</button></div>
+      <div id="fout" style="margin-top:14px"></div></div>`;
+  }
+  else if(st.t==='explain'){
+    body=`<p><strong>${st.q}</strong></p>
+      <textarea id="ex" placeholder="Type your answer before looking. Rough is fine — the point is producing it, not polishing it."></textarea>
+      <div style="margin-top:10px"><button class="go" id="exshow">Compare</button></div>
+      <div id="exout"></div>`;
+  }
+  else if(st.t==='done'){
+    body=`<p class="lead">That's the course.</p>
+      <p>You can now say what it does, where the data comes from, why recovery doesn't undermine it, and why you built it. That's the interview.</p>
+      <div class="tip"><strong>One last thing, and it's the one that counts.</strong> Say question 1 out loud, to a person or a voice memo, with this screen closed. If it comes out in under 60 seconds without stalling, you own it.</div>
+      <div style="margin-top:16px"><button class="ghost" id="again">Start over</button></div>`;
+  }
+
+  stage.innerHTML=`<div class="card">
+    <div class="eyebrow"><span>${LEVELS[L].name}</span><span class="time">~${LEVELS[L].mins} min</span></div>
+    ${st.h?`<h1>${st.h}</h1>`:''}
+    ${body}
+    ${st.say?`<div class="say"><div class="lab">Say this out loud</div><p>${st.say}</p></div>`:''}
+    <div class="nav">
+      <button class="ghost" id="back" ${L===0&&S===0?'disabled':''}>← Back</button>
+      <button class="go" id="next">${last()?'Finish':'Next →'}</button>
+    </div></div>`;
+
+  wire(st);
+  $('back').onclick=prev; $('next').onclick=next;
+  window.scrollTo({top:0,behavior:'instant'});
+}
+const last=()=>L===LEVELS.length-1&&S===LEVELS[L].steps.length-1;
+function next(){ if(last())return; S++; if(S>=LEVELS[L].steps.length){L++;S=0;} render(); }
+function prev(){ S--; if(S<0){L=Math.max(0,L-1);S=LEVELS[L].steps.length-1;} render(); }
+
+function wire(st){
+  if(st.t==='slider'){
+    const sl=$('sl');
+    const upd=()=>{
+      const v=+sl.value;
+      if(st.mode==='rec'){
+        $('sv').textContent=v+'%';
+        const q=quick(85,v/100);
+        $('sout').innerHTML=`<div class="readout">
+          <span class="k">spread (fixed)   </span> 85 bp
+          <br><span class="k">recovery         </span> ${v}%
+          <br><span class="k">→ hazard         </span> <span class="v">${(q.h*1e4).toFixed(1)} bp</span>
+          <br><span class="k">→ 5Y default prob</span> <span class="v">${pct(q.pd5)}</span></div>`;
+      }else{
+        $('sv').textContent=v+' bp';
+        const q=quick(v);
+        $('sout').innerHTML=`<div class="bigsub">5-year default probability</div>
+          <div class="big">${pct(q.pd5)}</div>
+          <div class="readout"><span class="k">cost per year on $10m </span> $${cash(v*1e-4*1e7)}
+          <br><span class="k">hazard rate           </span> <span class="v">${(q.h*1e4).toFixed(1)} bp</span>
+          <br><span class="k">default within 1 year </span> ${pct(q.pd1)}
+          <br><span class="k">default within 10 yrs </span> ${pct(q.pd10)}</div>`;
+      }
+    };
+    sl.oninput=upd; upd();
+  }
+  if(st.t==='mc'){
+    stage.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+      const k=+b.dataset.k, ok=k===st.a;
+      stage.querySelectorAll('.opt').forEach(x=>{x.disabled=true;
+        if(+x.dataset.k===st.a)x.classList.add('right');
+        else if(+x.dataset.k===k)x.classList.add('wrong');});
+      $('mcout').innerHTML=`<div class="answer ${ok?'':'miss'}">${ok?'<p><strong>Yes.</strong></p>':'<p><strong>Not quite.</strong></p>'}${st.w}</div>`;
+    });
+  }
+  if(st.t==='free'){
+    $('frun').onclick=()=>{
+      const rows=$('fin').value.split(/\n/).map(l=>{
+        const p=l.split(/[,\t]/).map(s=>s.trim());
+        const v=parseFloat(p[1]); return (p[0]&&!isNaN(v)&&v>0)?[p[0],v]:null;
+      }).filter(Boolean);
+      if(!rows.length){ $('fout').innerHTML='<div class="answer miss"><p>Each line needs a name and a number.</p></div>'; return; }
+      const res=rows.map(([n,s])=>({n,s,q:quick(s)})).sort((a,b)=>a.q.pd5-b.q.pd5);
+      $('fout').innerHTML=`<table><tr><th>Name</th><th>Spread</th><th>Hazard</th><th>5Y PD</th><th>JTD/CS01</th></tr>`+
+        res.map(r=>`<tr><td>${r.n}</td><td>${r.s} bp</td><td>${(r.q.h*1e4).toFixed(0)} bp</td>
+          <td class="hl">${pct(r.q.pd5)}</td><td>${(r.q.risk.jtd/r.q.risk.cs01).toFixed(0)}×</td></tr>`).join('')+
+        `</table><p style="font-size:13.5px;color:var(--dim);margin-top:10px">Sorted safest first. Same engine,
+         same maths, your names. This is the analysis — the rest is stating the caveats.</p>`;
+    };
+  }
+  if(st.t==='explain'){
+    $('exshow').onclick=()=>{
+      const mine=$('ex').value.trim();
+      $('exout').innerHTML=`<div class="answer">
+        <p style="font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:600;margin-bottom:8px">A model answer</p>
+        <p>${st.model}</p></div>
+        ${mine.length<25?'<div class="tip">You left it blank or nearly. Go back and type it — reading a model answer you didn\'t attempt teaches almost nothing.</div>':
+        '<div class="tip">Compare on <strong>content</strong>, not wording. Did you hit the same two or three points? If yes, you have it.</div>'}`;
+    };
+  }
+  if(st.t==='done') $('again').onclick=()=>{L=0;S=0;render();};
+}
+
+document.addEventListener('keydown',e=>{
+  if(/INPUT|TEXTAREA/.test(document.activeElement.tagName)&&e.key!=='Escape')return;
+  if(e.key==='ArrowRight'||e.key==='Enter')next();
+  if(e.key==='ArrowLeft')prev();
+  const st=LEVELS[L].steps[S];
+  if(st.t==='mc'){const k=KEYS.indexOf(e.key.toUpperCase());
+    if(k>-1&&k<st.o.length) stage.querySelectorAll('.opt')[k]?.click();}
+});
+
+render();
+</script>
+</body>
+</html>

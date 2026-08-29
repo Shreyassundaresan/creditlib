@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "creditlib"
+version = "0.5.0"
+description = "Single-name CDS pricing engine: hazard-rate bootstrapping, exact leg integration, credit risk measures"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+# QuantLib is used ONLY as an independent validation oracle, never on the
+# pricing path. Tests that need it skip cleanly if it is absent.
+test = ["pytest>=7.4", "QuantLib>=1.30"]
+notebook = ["jupyter", "notebook"]
+
+[tool.setuptools.packages.find]
+include = ["creditlib*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

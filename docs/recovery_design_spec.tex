@@ -1,0 +1,534 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.4cm,top=2.6cm,bottom=2.6cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[table]{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage[T1]{fontenc}
+\usepackage[expansion=false]{microtype}
+\usepackage[hidelinks,colorlinks=true,linkcolor=accent,urlcolor=accent]{hyperref}
+
+\definecolor{accent}{HTML}{1F4E79}
+\definecolor{rule}{HTML}{B8C4CE}
+\definecolor{codebg}{HTML}{F6F7F9}
+\definecolor{warn}{HTML}{9A4B00}
+
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.6em}{0.7em}
+
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small\textcolor{accent}{creditlib \textbar\ Endogenous Recovery}}
+\fancyhead[R]{\small\textcolor{accent}{Design \& Process}}
+\fancyfoot[C]{\small\thepage}
+
+\lstset{basicstyle=\ttfamily\scriptsize,backgroundcolor=\color{codebg},
+  frame=single,rulecolor=\color{rule},breaklines=true,showstringspaces=false,
+  language=Python,xleftmargin=0pt,framexleftmargin=3pt,aboveskip=0.9em,belowskip=0.9em}
+
+\newcommand{\keypoint}[1]{\par\vspace{0.4em}\noindent
+  \colorbox{codebg}{\parbox{\dimexpr\linewidth-2\fboxsep}{\small #1}}\par\vspace{0.5em}}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{2.2cm}
+{\Huge\bfseries\color{accent} Endogenous Recovery\par}
+\vspace{0.7em}
+{\LARGE Design and Process Specification\par}
+\vspace{0.5em}
+{\large Extending \texttt{creditlib} beyond the flat 40\% convention\par}
+\vspace{2.2cm}
+\rule{0.62\textwidth}{0.6pt}\par
+\vspace{1.1em}
+{\large Shreyas Sundaresan\par}
+\vspace{0.4em}
+{\normalsize Design specification, methodology, and implementation plan\par}
+\vspace{1.1em}
+\rule{0.62\textwidth}{0.6pt}\par
+\vspace{2.2cm}
+
+\begin{minipage}{0.86\textwidth}\small
+\textbf{Purpose.} Replace the market-convention assumption of a uniform 40\%
+recovery rate with issuer-specific estimates produced by a fundamentals-based model,
+and propagate those estimates through the CDS bootstrap so that implied default
+probabilities reflect loss given default rather than assuming it away.
+
+\medskip
+\textbf{Central constraint.} A CDS spread identifies expected loss, approximately
+$h(1-R)$ --- one equation in two unknowns. Recovery is therefore not identifiable from
+spreads alone. This document specifies how that constraint is broken, why the chosen
+route avoids circularity, and what changes analytically as a result.
+
+\medskip
+\textbf{Status.} Model implemented and integrated. Coefficients are calibrated to
+published anchors, \emph{not} estimated from a default database. 104 tests passing.
+\end{minipage}
+
+\vfill
+{\small Version 1.0 \textbar\ August 2026}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+%% ============================================================= 1
+\section{Objective and Scope}
+
+\subsection{What this extends}
+
+The existing \texttt{creditlib} engine bootstraps a piecewise-flat hazard curve from
+quoted CDS spreads, prices both legs by exact closed-form integration, and computes
+standard credit risk measures. It assumes a single recovery rate --- conventionally
+40\% --- applied uniformly to every issuer.
+
+This extension replaces that assumption with a per-issuer estimate derived from
+fundamentals, and threads it through the bootstrap.
+
+\subsection{Two requirements, one of which is trivial}
+
+\textbf{Scale to twenty or more issuers.} Already satisfied. The library imposes no
+limit on the number of names; a forty-name cross-section bootstraps in under four
+seconds. No development required, and none was undertaken.
+
+\textbf{Endogenise recovery.} The substantive work, and the subject of this document.
+
+\subsection{Why the flat convention is not merely imprecise}
+
+A uniform 40\% is defensible as a \emph{quoting convention}: it makes spreads
+comparable across issuers by fixing the second unknown. It is not defensible as an
+estimate, and it is materially wrong for identifiable categories.
+
+The clearest case is bank holding company debt. Single-name bank CDS references the
+\emph{holding company}, and under Dodd-Frank Title II with a single-point-of-entry
+resolution strategy, holdco senior unsecured is explicitly TLAC --- it exists to be
+written down or converted so that operating subsidiaries continue. Its recovery in
+the state that triggers a credit event is designed to be low. Lehman Brothers senior
+settled at 8.625 cents in the October 2008 auction, roughly one fifth of the convention.
+
+\keypoint{Applying 40\% to a bank holdco and to a secured real estate credit treats
+two structurally different claims as identical. The resulting default probabilities
+are not comparable, and the error is systematic rather than random.}
+
+%% ============================================================= 2
+\section{The Identification Problem}
+
+\subsection{Statement}
+
+To first order, a CDS par spread satisfies the credit triangle
+\[
+s \;\approx\; h\,(1-R)
+\]
+and exactly, in the continuous-premium limit with flat rates, $s = h(1-R)$.
+
+One observable, two unknowns. The pair $(h, R)$ is not identified: for any assumed
+$R$ there exists an $h$ reproducing the observed spread exactly.
+
+\subsection{Demonstration}
+
+Bootstrapping an identical five-tenor quote set at $R = 40\%$ and $R = 20\%$ produces:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+& \textbf{$R = 40\%$} & \textbf{$R = 20\%$} \\
+\midrule
+Repricing error (relative) & $4.4\times10^{-16}$ & $4.4\times10^{-16}$ \\
+Hazard ratio to the 40\% case & 1.000 & 0.750 \\
+Implied 5Y default probability & 8.37\% & 6.34\% \\
+Implied ranking across names & unchanged & unchanged \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both fit perfectly. The hazards differ by exactly $(1-0.40)/(1-0.20) = 0.75$. This is
+not a numerical artefact --- it is the identification failure made visible, and it is
+covered by a regression test.
+
+\subsection{The one thing the degeneracy protects}
+
+Under a \emph{uniform} recovery, $h = s/(1-R)$ is a strictly monotone transform of the
+spread. The implied default probability ranking is therefore invariant to the
+assumption. Levels move; order does not.
+
+This is why the existing engine's conclusions survive the weak assumption. It is also
+precisely what the extension gives up.
+
+%% ============================================================= 3
+\section{Routes to Identification}
+
+Three ways to obtain a second equation. All were considered.
+
+\subsection{Route A --- Fundamentals model (selected)}
+
+Estimate $R$ from issuer characteristics outside the CDS market entirely: seniority,
+sector asset tangibility, debt cushion, leverage, macroeconomic state. Feed the result
+into the bootstrap as a known input.
+
+\textbf{Advantages.} No additional market data required. No circularity --- nothing in
+the recovery model reads a spread. Applies to every issuer, including illiquid names
+with a single quote. Directly interpretable, and the drivers are the same ones a
+fundamental credit analyst already examines.
+
+\textbf{Disadvantages.} The estimate is only as good as the model. Requires a default
+database for genuine statistical estimation; without one it is an expert scorecard.
+Introduces model risk where previously there was only an acknowledged convention.
+
+\subsection{Route B --- Market-implied via a second instrument}
+
+Recovery becomes identifiable given a second quote on the same issuer with different
+loss given default. Practical instruments:
+
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+\item \textbf{Senior versus subordinated CDS.} Same hazard, different recovery. Two
+equations, two unknowns.
+\item \textbf{Recovery swaps or fixed-recovery CDS.} Directly quoted recovery.
+\item \textbf{CDS--bond basis.} The cash bond price contains recovery information.
+\end{itemize}
+
+\textbf{Advantages.} Market-implied rather than modelled; reflects the market's own view.
+
+\textbf{Disadvantages.} Requires two liquid quotes per issuer. Subordinated CDS is thin
+for most names and effectively absent for many. Recovery swaps are rare. Restricts the
+universe to the most liquid handful of issuers, which defeats the purpose of a
+twenty-name cross-section.
+
+\subsection{Route C --- Bayesian combination}
+
+Fundamentals model as prior; market data as likelihood where a second instrument exists.
+
+\textbf{Assessment.} The correct long-run architecture, and the natural version~2. Not
+attempted here: without a fitted prior it would layer complexity on an unestimated model.
+
+\subsection{Decision}
+
+\keypoint{\textbf{Route A is implemented.} Route B is specified as the version~2
+extension for the subset of issuers with a senior/subordinated pair, at which point
+Route C becomes available for free. The architecture accepts a per-name recovery
+mapping regardless of its provenance, so switching or blending routes requires no
+change to the pricing path.}
+
+%% ============================================================= 4
+\section{Model Specification}
+
+\subsection{Functional form}
+
+A logit-linear scorecard:
+\[
+z \;=\; \beta_0 \;+\; \beta_{\text{sen}}[\text{seniority}]
+\;+\; \beta_{\text{tang}}(\tau - 0.5)
+\;+\; \beta_{\text{cush}}\,c
+\;-\; \beta_{\text{lev}}\frac{\ell - 3}{10}
+\;+\; \beta_{\text{macro}}\,m
+\]
+\[
+R \;=\; \frac{1}{1 + e^{-z}}
+\]
+
+The logistic link is not cosmetic. The bootstrap divides by $(1-R)$, so a prediction of
+exactly $1.0$ would be a division by zero and a prediction below $0$ would be
+meaningless. The link guarantees $R \in (0,1)$ for \emph{any} input combination, which
+is enforced by a test sweeping extreme values of every covariate.
+
+\subsection{Covariates and rationale}
+
+\begin{center}
+\begin{tabular}{p{2.6cm}p{3.0cm}p{8.4cm}}
+\toprule
+\textbf{Covariate} & \textbf{Measure} & \textbf{Rationale} \\
+\midrule
+Seniority & Categorical & Position in the capital structure is the dominant driver.
+Secured claims recover most; junior subordinated least. \\[0.3em]
+Tangibility $\tau$ & Sector proxy, $[0,1]$ & Hard assets survive bankruptcy and can be
+sold. Utilities and real estate recover far more than software. \\[0.3em]
+Debt cushion $c$ & Fraction of debt ranking junior & Junior debt absorbs losses first,
+lifting recovery on the senior claim. \\[0.3em]
+Leverage $\ell$ & Net debt / EBITDA & Less asset value per unit of claim. Neutral at 3.0. \\[0.3em]
+Macro state $m$ & $[-1,1]$ & Recoveries fall in downturns. Recovery and default are
+positively correlated, which is exactly when it hurts. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Calibration anchors}
+
+Coefficients are set so that neutral covariates reproduce the published ordering:
+
+\begin{center}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Seniority} & \textbf{Target} & \textbf{Model} \\
+\midrule
+Secured & 65\% & 65.6\% \\
+Senior unsecured & 40\% & 40.0\% \\
+Bank holdco senior (TLAC) & 24\% & 24.0\% \\
+Subordinated & 20\% & 18.9\% \\
+Junior subordinated & 10\% & 9.5\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Status: calibrated, not estimated}
+
+\keypoint{\textbf{This is an expert scorecard with a defensible functional form. It is
+not a fitted statistical model.} Coefficients are calibrated to published anchors
+rather than estimated from a recovery database. Any write-up, presentation or interview
+discussion must describe it as calibrated. Overstating it is the fastest available way
+to lose credibility on this work, and the distinction is one an experienced credit
+analyst will probe within two questions.}
+
+The estimation path exists. \texttt{RecoveryModel.fit()} performs ridge-regularised
+least squares in logit space, requires a minimum of twelve observations, and sets the
+uncertainty band from residual dispersion. It refuses to run on smaller samples on the
+grounds that the calibrated defaults are more defensible than an overfitted estimate.
+The \texttt{fitted} flag stays \texttt{False} until real data is supplied.
+
+\subsection{Uncertainty band}
+
+The model reports an interval, not a point. The default half-width of 0.55 logit units
+gives roughly $\pm 12$ points around a 40\% central estimate. This is deliberately wide:
+empirical recovery distributions are broad and materially bimodal, and a narrow band
+would be false precision. After \texttt{fit()}, the band is replaced by the residual
+standard deviation.
+
+%% ============================================================= 5
+\section{Architecture and Integration}
+
+\subsection{Separation of concerns}
+
+\begin{lstlisting}[language={}]
+creditlib/
+  recovery.py       IssuerProfile -> RecoveryModel -> RecoveryEstimate
+  analyze.py        compare(names, recovery=float | {name: float})
+  bootstrap.py      unchanged -- already accepted a recovery argument
+  cds.py            unchanged
+\end{lstlisting}
+
+\keypoint{\textbf{The pricing path is untouched.} \texttt{bootstrap\_survival\_curve}
+already took recovery as an argument; the extension changes only what is passed to it.
+That is the test of a correct architecture --- adding a recovery model required no
+change to any pricing code, and all 86 pre-existing tests continued to pass unmodified.}
+
+\subsection{Interface}
+
+\begin{lstlisting}
+from creditlib import RecoveryModel, IssuerProfile, recovery_map, compare
+
+profiles = [
+    IssuerProfile("JPMorgan",   sector="banks",     is_bank=True, debt_cushion=0.22),
+    IssuerProfile("Duke Energy", sector="utilities", leverage=4.8, debt_cushion=0.05),
+    IssuerProfile("Prologis",   sector="real_estate", seniority="secured",
+                  leverage=5.2, debt_cushion=0.15),
+]
+
+model = RecoveryModel()
+R = recovery_map(model, profiles)          # {name: recovery}
+
+compare({"JPMorgan": 58, "Duke Energy": 62, "Prologis": 57}, recovery=R)
+\end{lstlisting}
+
+Recovery may be a scalar (uniform, as before) or a mapping (per-name). Supplying a
+mapping with a missing name raises rather than silently defaulting --- a silent fallback
+to 40\% would reintroduce the exact error the module exists to remove.
+
+\subsection{Automatic bank reclassification}
+
+Constructing an \texttt{IssuerProfile} with \texttt{is\_bank=True} and seniority
+\texttt{senior\_unsecured} silently promotes it to \texttt{holdco\_senior} and records
+the reason in the profile's notes. Single-name bank CDS references the holdco, and
+treating that claim as ordinary corporate senior is the largest single error the module
+is designed to prevent. Making it an automatic correction rather than user
+responsibility is a deliberate choice.
+
+%% ============================================================= 6
+\section{Empirical Results}
+
+\subsection{Test universe}
+
+Twenty issuers across ten sectors and two seniority classes: six financials, two
+utilities, two energy, one transport, one autos, one consumer staples, one retail, one
+healthcare, one pharma, one software, one media, one real estate (secured), one telecom.
+Spreads span 41bp to 395bp.
+
+\subsection{Predicted recovery dispersion}
+
+\begin{center}
+\begin{tabular}{lrl}
+\toprule
+\textbf{Issuer} & \textbf{Predicted $R$} & \textbf{Principal driver} \\
+\midrule
+Prologis (secured, real estate) & 74.6\% & Secured claim, high tangibility \\
+NextEra (utilities) & 51.8\% & Hard assets \\
+Exxon Mobil (energy) & 51.2\% & Hard assets, low leverage \\
+Kroger (consumer staples) & 42.7\% & Near the convention \\
+Oracle (software) & 31.6\% & Low tangibility \\
+Citigroup (bank holdco) & 24.2\% & TLAC layer \\
+U.S. Bancorp (bank holdco) & 21.7\% & TLAC, thin debt cushion \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Range: 21.7\% to 74.6\%. The flat convention assigns 40\% to all twenty.
+
+\subsection{Effect on the ranking}
+
+Recomputing implied default probabilities with model recovery in place of the flat 40\%:
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Issuer} & \textbf{Spread} & \textbf{PD (flat 40\%)} & \textbf{PD (model)} & \textbf{Rank move} \\
+\midrule
+JPMorgan & 58 bp & 4.76\% & 3.76\% & $+4$ \\
+Bank of America & 63 bp & 5.16\% & 4.06\% & $+5$ \\
+Wells Fargo & 72 bp & 5.87\% & 4.60\% & $+5$ \\
+Citigroup & 85 bp & 6.90\% & 5.50\% & $+5$ \\
+Exxon Mobil & 41 bp & 3.39\% & 4.15\% & $-3$ \\
+NextEra & 55 bp & 4.52\% & 5.59\% & $-5$ \\
+Prologis & 57 bp & 4.68\% & 10.72\% & $-10$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\keypoint{\textbf{Thirteen of twenty issuers change rank. The largest move is ten
+places.} Prologis --- secured, 74.6\% recovery --- moves from fifth-safest to
+fifteenth: because each default costs little, the same 57bp spread requires far more
+defaults to justify. Every bank moves the other way, because a low-recovery claim needs
+fewer defaults to justify the same premium.}
+
+\subsection{The finding that matters}
+
+The flat convention \textbf{systematically overstates implied default probabilities for
+bank holding companies relative to asset-heavy credits}, because it assigns them a
+recovery rate roughly sixteen points above what their position in the resolution
+hierarchy implies.
+
+This is directly relevant to comparing bank credit against non-financial credit on a
+CDS-implied basis. Any cross-sector ranking computed at a flat 40\% carries this bias,
+and the bias is one-directional rather than noise.
+
+\subsection{What is now given up}
+
+Ranking invariance. Under a uniform recovery the ordering was independent of the
+assumption; it now depends on the recovery model. That is the intended trade: the
+ranking carries an analytical view rather than being a monotone restatement of the
+spreads. It must be presented as such, with the model's limitations attached.
+
+%% ============================================================= 7
+\section{Validation}
+
+\subsection{Implemented (18 new tests, 104 total)}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=0.15em]
+\item \textbf{Calibration anchors} reproduced within 2 percentage points.
+\item \textbf{Strict seniority ordering} across all five classes.
+\item \textbf{Boundedness} --- $R \in (0,1)$ under a sweep of extreme leverage, cycle,
+cushion and seniority combinations. Guards the division by $(1-R)$.
+\item \textbf{Driver directions} --- cushion up, leverage down, recession down,
+tangibility up. Each asserted separately.
+\item \textbf{Bank auto-reclassification} to the TLAC layer, with the note recorded.
+\item \textbf{Identification property} --- uniform recovery leaves ranking invariant;
+name-specific recovery breaks it. Both directions asserted.
+\item \textbf{Exact repricing preserved} under name-specific recovery
+($< 10^{-13}$ relative).
+\item \textbf{Missing recovery rejected}, never silently defaulted.
+\item \textbf{Estimator correctness} on a planted synthetic signal, and ridge shrinkage
+pinned directionally so it cannot be lost silently.
+\end{itemize}
+
+\subsection{Not yet possible}
+
+\keypoint{\textbf{There is no out-of-sample validation, because there is no sample.}
+The model is calibrated, not estimated, so accuracy against realised recoveries is
+untested. This is the single largest open item and no claim about predictive
+performance should be made until it is closed.}
+
+\subsection{Validation plan once data is available}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.2em]
+\item \textbf{Assemble} realised recoveries --- Moody's Ultimate Recovery Database, S\&P
+LossStats, or credit-event auction settlement prices, which are public and a viable
+starting point.
+\item \textbf{Fit} via \texttt{RecoveryModel.fit()} with ridge regularisation.
+\item \textbf{Cross-validate} by time period, not randomly. Recovery is strongly
+cyclical, so random folds leak macro state across the split and flatter the model.
+\item \textbf{Benchmark} against two naive baselines: the flat 40\% convention, and a
+seniority-only lookup. If the full model does not beat seniority-only, the additional
+covariates are not earning their place.
+\item \textbf{Report} mean absolute error in recovery points, and separately the effect
+on implied default probability, which is what the analysis actually consumes.
+\item \textbf{Stability} --- refit annually, monitor coefficient drift.
+\end{enumerate}
+
+%% ============================================================= 8
+\section{Limitations}
+
+\begin{enumerate}[leftmargin=1.4em,itemsep=0.3em]
+\item \textbf{Calibrated, not estimated.} Stated repeatedly because it is the point
+most likely to be overstated.
+
+\item \textbf{Deterministic recovery.} The model returns a point estimate with a band,
+but the bootstrap consumes only the point. Recovery is genuinely stochastic and
+correlated with default. A full treatment requires a joint distribution.
+
+\item \textbf{Sector tangibility is a coarse proxy.} A single number per sector ignores
+within-sector dispersion, which is wide.
+
+\item \textbf{No jurisdiction effect.} Bankruptcy regimes differ materially --- US
+Chapter 11 versus UK administration versus European insolvency codes. Not modelled.
+
+\item \textbf{Static macro state.} A single scalar, user-supplied. A term structure of
+recovery --- lower in the near term during a downturn --- is not represented.
+
+\item \textbf{Bank treatment is structural, not quantitative.} The TLAC reclassification
+correctly identifies that holdco senior sits in the bail-in layer, but the resulting
+24\% anchor is judgement informed by one observation (Lehman) and the design intent of
+the resolution regime. It is not an estimate.
+\end{enumerate}
+
+%% ============================================================= 9
+\section{Roadmap}
+
+\begin{center}
+\begin{tabular}{p{1.1cm}p{5.4cm}p{8.0cm}}
+\toprule
+\textbf{Ver.} & \textbf{Scope} & \textbf{Unlocks} \\
+\midrule
+1.0 & Fundamentals scorecard, per-name recovery through the bootstrap & Cross-sector
+comparison free of the flat-40\% bias \\[0.3em]
+1.1 & Fit on auction settlement data & Moves from calibrated to estimated; enables
+out-of-sample error reporting \\[0.3em]
+2.0 & Senior/subordinated basis for issuers with both quoted & Market-implied recovery;
+identification without a model \\[0.3em]
+2.1 & Bayesian combination of model prior and market likelihood & Full coverage with
+market updating where available \\[0.3em]
+3.0 & Stochastic recovery with default correlation & Removes the deterministic-recovery
+limitation; required for portfolio work \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Immediate next step}
+
+Version 1.1. Credit-event auction settlement prices are public, span roughly two decades,
+and cover several hundred defaults. That is sufficient to move the headline claim from
+``calibrated to published anchors'' to ``estimated from realised recoveries, with
+out-of-sample error of $X$ points'' --- a materially stronger statement, and the one
+worth making.
+
+\vspace{2em}
+\hrule
+\vspace{0.8em}
+{\small\itshape
+Spreads used are indicative and supplied as inputs; the discount curve is illustrative.
+Recovery estimates are model output from calibrated coefficients and have not been
+validated against realised recoveries. Nothing in this document is investment advice.}
+
+\end{document}

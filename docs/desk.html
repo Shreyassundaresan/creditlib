@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>creditlib desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#101820; --panel:#18222D; --panel2:#1E2A37; --line:#2C3A49; --line2:#3A4B5C;
+  --txt:#DFE7EF; --dim:#8A9BAC; --amber:#E3A44B; --teal:#4FBFA0; --red:#E5776F;
+  --blue:#6BA8DE;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace; --sans:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px;line-height:1.5}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:12px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.logo{font-weight:700;letter-spacing:-.01em;font-size:16px}
+.logo span{color:var(--amber)}
+.badge{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;letter-spacing:.05em}
+.badge.ok{background:rgba(79,191,160,.13);color:var(--teal);border:1px solid rgba(79,191,160,.35)}
+.badge.bad{background:rgba(229,119,111,.13);color:var(--red);border:1px solid rgba(229,119,111,.4)}
+.badge.wait{background:rgba(138,155,172,.12);color:var(--dim);border:1px solid var(--line2)}
+
+.grid{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 53px)}
+.left{border-right:1px solid var(--line);padding:16px;overflow-y:auto}
+.right{padding:16px 20px;overflow-x:auto}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.left{border-right:none;border-bottom:1px solid var(--line)}}
+
+h2{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--dim);font-weight:600;margin:0 0 10px}
+.sec{margin-bottom:22px}
+
+/* name rows */
+.row{display:grid;grid-template-columns:1fr 62px 26px;gap:6px;margin-bottom:6px;align-items:center}
+input,select{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+  font-family:var(--mono);font-size:13px;padding:7px 9px;border-radius:2px;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--amber)}
+input.nm{font-family:var(--sans)}
+.del{background:none;border:1px solid var(--line);color:var(--dim);cursor:pointer;
+  border-radius:2px;padding:6px 0;font-size:14px;line-height:1}
+.del:hover{color:var(--red);border-color:var(--red)}
+.add{width:100%;background:var(--panel2);border:1px dashed var(--line2);color:var(--dim);
+  padding:8px;border-radius:2px;cursor:pointer;font-family:var(--mono);font-size:12px}
+.add:hover{border-color:var(--amber);color:var(--amber)}
+.hdr{display:grid;grid-template-columns:1fr 62px 26px;gap:6px;margin-bottom:5px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.09em;color:var(--dim);text-transform:uppercase}
+
+.ctl{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;gap:10px}
+.ctl label{font-size:13px;color:var(--dim)}
+.ctl .val{font-family:var(--mono);font-size:13px;color:var(--amber);font-weight:600}
+input[type=range]{padding:0;height:4px;-webkit-appearance:none;background:var(--line2);border:none;border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;
+  background:var(--amber);border-radius:50%;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;background:var(--amber);border:none;border-radius:50%;cursor:pointer}
+
+.btn{font-family:var(--mono);font-size:12px;background:var(--panel2);border:1px solid var(--line2);
+  color:var(--txt);padding:8px 13px;border-radius:2px;cursor:pointer;letter-spacing:.04em}
+.btn:hover{border-color:var(--amber);color:var(--amber)}
+.btnrow{display:flex;gap:7px;flex-wrap:wrap}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px}
+th{text-align:right;padding:7px 9px;color:var(--dim);font-weight:600;font-size:10.5px;
+  letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--line2)}
+th:first-child,td:first-child{text-align:left}
+td{padding:8px 9px;border-bottom:1px solid var(--line);text-align:right}
+tr:hover td{background:var(--panel)}
+td.nm{font-family:var(--sans);font-weight:500}
+.sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:baseline}
+.pos{color:var(--teal)} .neg{color:var(--red)} .hi{color:var(--amber)}
+
+.err{background:rgba(229,119,111,.1);border:1px solid rgba(229,119,111,.4);
+  color:var(--red);padding:11px 13px;border-radius:3px;font-size:13px;margin-bottom:14px}
+.note{color:var(--dim);font-size:12px;margin-top:9px;line-height:1.5}
+
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:12px;margin-bottom:20px}
+.tabs{display:flex;gap:5px;margin-bottom:12px;flex-wrap:wrap}
+.tab{font-family:var(--mono);font-size:11.5px;padding:6px 12px;border:1px solid var(--line2);
+  background:none;color:var(--dim);border-radius:2px;cursor:pointer;letter-spacing:.05em}
+.tab.on{background:var(--panel2);color:var(--amber);border-color:var(--amber)}
+
+textarea{width:100%;height:230px;background:var(--panel);border:1px solid var(--line);
+  color:var(--txt);font-family:var(--mono);font-size:11.5px;padding:11px;border-radius:2px;resize:vertical}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="logo">creditlib <span>/</span> desk</div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span class="badge wait" id="selftest">validating…</span>
+    <span class="badge wait" id="reprice">—</span>
+  </div>
+</div>
+
+<div class="grid">
+<div class="left">
+
+  <div class="sec">
+    <h2>Names</h2>
+    <div class="hdr"><span>Issuer</span><span>5Y bp</span><span></span></div>
+    <div id="rows"></div>
+    <button class="add" id="addRow">+ add name</button>
+    <button class="add" id="pasteToggle" style="margin-top:5px">⇪ paste from Excel</button>
+    <div id="pastePanel" class="hidden" style="margin-top:8px">
+      <textarea id="pasteBox" style="height:110px;font-size:11.5px"
+        placeholder="Paste straight from a spreadsheet.
+
+JPMorgan	58
+Citigroup	85
+
+or with a full curve:
+JPMorgan	40	49	58	66	74
+
+Comma or tab separated. Headers are skipped."></textarea>
+      <div class="btnrow" style="margin-top:6px">
+        <button class="btn" id="pasteLoad">Load</button>
+        <button class="btn" id="pasteAppend">Append</button>
+        <button class="btn" id="pasteCancel">Cancel</button>
+      </div>
+      <div class="note" id="pasteMsg"></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Assumptions</h2>
+    <div class="ctl"><label>Recovery</label><span class="val" id="recVal">40%</span></div>
+    <input type="range" id="rec" min="0" max="90" step="1" value="40">
+    <div class="ctl" style="margin-top:14px"><label>Notional</label>
+      <input style="width:120px" id="notional" value="10,000,000"></div>
+    <div class="ctl"><label>Fixed coupon (bp)</label>
+      <input style="width:120px" id="coupon" value="100"></div>
+    <div class="ctl"><label>Trade date</label>
+      <input style="width:140px" type="date" id="tdate" value="2026-08-17"></div>
+  </div>
+
+  <div class="sec">
+    <h2>Term structure</h2>
+    <select id="mode">
+      <option value="single">Single 5Y quote per name</option>
+      <option value="multi">Full curve (1/3/5/7/10Y)</option>
+    </select>
+    <div class="note" id="modeNote"></div>
+  </div>
+
+  <div class="sec">
+    <h2>Presets</h2>
+    <div class="btnrow">
+      <button class="btn" data-preset="banks">US banks</button>
+      <button class="btn" data-preset="curve">Term structure</button>
+      <button class="btn" data-preset="stress">Distressed</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="right">
+  <div id="errs"></div>
+
+  <div class="tabs">
+    <button class="tab on" data-view="pd">Implied PD</button>
+    <button class="tab" data-view="hz">Forward hazards</button>
+    <button class="tab" data-view="rec">Recovery sensitivity</button>
+  </div>
+  <div class="chart"><div id="chart"></div></div>
+
+  <h2>Ranking</h2>
+  <div style="overflow-x:auto"><table id="rank"></table></div>
+  <div class="note" id="ranknote"></div>
+
+  <h2 style="margin-top:24px">Risk</h2>
+  <div style="overflow-x:auto"><table id="risk"></table></div>
+
+  <h2 style="margin-top:24px">Arbitrage bounds</h2>
+  <div style="overflow-x:auto"><table id="bounds"></table></div>
+
+  <h2 style="margin-top:24px">Export</h2>
+  <div class="btnrow" style="margin-bottom:10px">
+    <button class="btn" id="genMd">Markdown memo</button>
+    <button class="btn" id="genCsv">CSV</button>
+    <button class="btn" id="genPy">Python (creditlib)</button>
+    <button class="btn" id="copyOut">Copy</button>
+  </div>
+  <textarea id="out" class="hidden" readonly></textarea>
+</div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   Pricing core — direct port of creditlib. Validated on load against exact
+   values from the Python engine (see SELFTEST). If the badge is not green,
+   do not trust the numbers on this page.
+   ========================================================================= */
+const DAY = 86400000;
+const ymd = s => { const [y,m,d]=s.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); };
+const act365 = (a,b) => (b-a)/DAY/365;
+const act360 = (a,b) => (b-a)/DAY/360;
+const IMM_M = [2,5,8,11];                       // 0-indexed Mar/Jun/Sep/Dec
+
+function prevIMM(d){
+  for(const y of [d.getUTCFullYear(), d.getUTCFullYear()-1])
+    for(const m of [...IMM_M].reverse()){
+      const c = new Date(Date.UTC(y,m,20));
+      if(c <= d) return c;
+    }
+}
+function nextIMM(d){
+  for(const y of [d.getUTCFullYear(), d.getUTCFullYear()+1])
+    for(const m of IMM_M){
+      const c = new Date(Date.UTC(y,m,20));
+      if(c >= d) return c;
+    }
+}
+/* CDS2015: tenor runs from the ACCRUAL START (previous IMM), not the trade date. */
+function makeSchedule(trade, tenorYears){
+  const start = prevIMM(trade);
+  const months = Math.round(tenorYears*12);
+  let y = start.getUTCFullYear() + Math.floor((start.getUTCMonth()+months)/12);
+  let m = (start.getUTCMonth()+months)%12;
+  let maturity = new Date(Date.UTC(y,m,20));
+  if(!IMM_M.includes(maturity.getUTCMonth())) maturity = nextIMM(maturity);
+
+  const edges=[maturity]; let cur=maturity;
+  while(cur > start){
+    let yy=cur.getUTCFullYear(), mm=cur.getUTCMonth()-3;
+    while(mm<0){mm+=12;yy--;}
+    cur=new Date(Date.UTC(yy,mm,20)); edges.push(cur);
+  }
+  edges.sort((a,b)=>a-b); edges[0]=start;
+
+  const tS=[],tE=[],dl=[];
+  for(let k=0;k<edges.length-1;k++){
+    tS.push(act365(trade,edges[k])); tE.push(act365(trade,edges[k+1]));
+    dl.push(act360(edges[k],edges[k+1]));
+  }
+  let accr=0;
+  for(let k=0;k<edges.length-1;k++)
+    if(edges[k]<=trade && trade<edges[k+1]) accr=act360(edges[k],trade);
+  return {tS,tE,dl,accr,T:tE[tE.length-1],maturity};
+}
+
+/* piecewise-flat: value(t) = exp(-∫rate) */
+function mkCurve(times,rates){
+  const kn=[0,...times], cum=[0];
+  for(let k=0;k<rates.length;k++) cum.push(cum[k]+rates[k]*(kn[k+1]-kn[k]));
+  const idx=t=>{let i=0;while(i<times.length&&t>times[i]+1e-15)i++;return Math.min(i,rates.length-1);};
+  return {times,rates,
+    integral:t=>{const i=idx(t);return cum[i]+rates[i]*(t-kn[i]);},
+    rateAt:t=>rates[idx(t)],
+    value:t=>Math.exp(-(cum[idx(t)]+rates[idx(t)]*(t-kn[idx(t)])))};
+}
+/* discount curve: log-linear on DFs == piecewise-flat instantaneous forwards */
+function mkDisc(times,zeros){
+  const lg=times.map((t,i)=>-zeros[i]*t), kn=[0,...times], lgf=[0,...lg];
+  const fwd=[]; for(let k=0;k<times.length;k++) fwd.push(-(lgf[k+1]-lgf[k])/(kn[k+1]-kn[k]));
+  const idx=t=>{let i=0;while(i<times.length&&t>times[i]+1e-15)i++;return Math.min(i,fwd.length-1);};
+  return {times,fwd,
+    df:t=>{const i=idx(t);return Math.exp(lgf[i]-fwd[i]*(t-kn[i]));},
+    instFwd:t=>fwd[idx(t)]};
+}
+
+const TINY=1e-12;
+function mergedGrid(a,b,dc,cc){
+  const s=new Set([a,b]);
+  for(const t of dc.times) if(t>a+TINY&&t<b-TINY) s.add(t);
+  for(const t of cc.times) if(t>a+TINY&&t<b-TINY) s.add(t);
+  return [...s].sort((x,y)=>x-y);
+}
+/* ∫ D h Q dt = (h/(f+h))[DQ(a) - DQ(b)] on each flat sub-interval */
+function protLeg(dc,cc,sc,R){
+  const t0=Math.max(0,sc.tS[0]), T=sc.T; if(T<=t0) return 0;
+  let tot=0; const g=mergedGrid(t0,T,dc,cc);
+  for(let k=0;k<g.length-1;k++){
+    const lo=g[k],hi=g[k+1],mid=(lo+hi)/2;
+    const f=dc.instFwd(mid),h=cc.rateAt(mid); if(h<=0) continue;
+    const c=f+h, dqL=dc.df(lo)*cc.value(lo), dqH=dc.df(hi)*cc.value(hi);
+    tot += Math.abs(c)<TINY ? h*(hi-lo)*dqL : (h/c)*(dqL-dqH);
+  }
+  return (1-R)*tot;
+}
+/* ∫ (t-p) D h Q dt, exact */
+function accrInt(dc,cc,a,b,p){
+  if(b<=a) return 0; let tot=0; const g=mergedGrid(a,b,dc,cc);
+  for(let k=0;k<g.length-1;k++){
+    const lo=g[k],hi=g[k+1],mid=(lo+hi)/2;
+    const f=dc.instFwd(mid),h=cc.rateAt(mid); if(h<=0) continue;
+    const c=f+h,L=hi-lo,dqL=dc.df(lo)*cc.value(lo);
+    if(Math.abs(c)<TINY) tot += h*dqL*(0.5*L*L+(lo-p)*L);
+    else { const e=Math.exp(-c*L);
+      tot += h*dqL*((1-e*(1+c*L))/(c*c) + (lo-p)*(1-e)/c); }
+  }
+  return tot;
+}
+function annuity(dc,cc,sc){
+  const t0=Math.max(0,sc.tS[0]); let cp=0,ac=0;
+  for(let k=0;k<sc.tE.length;k++){
+    const a=sc.tS[k],b=sc.tE[k]; if(b<=t0) continue;
+    cp += sc.dl[k]*dc.df(b)*cc.value(b);
+    const lo=Math.max(a,t0), span=b-a; if(span<=0) continue;
+    ac += (sc.dl[k]/span)*accrInt(dc,cc,lo,b,a);
+  }
+  return cp+ac;
+}
+const parSpread=(dc,cc,sc,R,clean=true)=>protLeg(dc,cc,sc,R)/(annuity(dc,cc,sc)-(clean?sc.accr:0));
+
+class BootErr extends Error{constructor(m,tenor,bound){super(m);this.tenor=tenor;this.bound=bound;}}
+
+function bootstrap(quotes,dc,R,trade){
+  const tenors=Object.keys(quotes).map(Number).sort((a,b)=>a-b);
+  const scheds=tenors.map(t=>makeSchedule(trade,t));
+  const knots=scheds.map(s=>s.T), hz=[];
+  for(let k=0;k<tenors.length;k++){
+    const s=quotes[tenors[k]], sc=scheds[k];
+    const phi=h=>{
+      const cc=mkCurve(knots.slice(0,k+1),[...hz,h]);
+      return protLeg(dc,cc,sc,R) - s*(annuity(dc,cc,sc)-sc.accr);
+    };
+    if(phi(0)>0){
+      const cc0=mkCurve(knots.slice(0,k+1),[...hz,0]);
+      const floor=parSpread(dc,cc0,sc,R);
+      throw new BootErr(`${tenors[k]}Y at ${(s*1e4).toFixed(1)}bp is below the `+
+        `${(floor*1e4).toFixed(1)}bp floor set by the shorter quotes. Reproducing it needs a `+
+        `negative forward hazard — a negative forward default probability.`,tenors[k],floor*1e4);
+    }
+    let hi=Math.max(2*s/(1-R),1e-4);
+    while(phi(hi)<0){ hi*=2;
+      if(hi>20){ const cc=mkCurve(knots.slice(0,k+1),[...hz,20]);
+        throw new BootErr(`${tenors[k]}Y at ${(s*1e4).toFixed(0)}bp exceeds the `+
+          `${(parSpread(dc,cc,sc,R)*1e4).toFixed(0)}bp certain-default ceiling at R=${(R*100).toFixed(0)}%. `+
+          `No non-negative hazard prices protection above the maximum possible loss.`,
+          tenors[k],parSpread(dc,cc,sc,R)*1e4); } }
+    let lo=0; for(let n=0;n<300;n++){const m=(lo+hi)/2; (phi(m)<0?lo=m:hi=m);}   // bisection to machine eps
+    hz.push((lo+hi)/2);
+  }
+  const curve=mkCurve(knots,hz);
+  const repriced=scheds.map(sc=>parSpread(dc,curve,sc,R));
+  const err=Math.max(...repriced.map((r,k)=>Math.abs(r/quotes[tenors[k]]-1)));
+  return {curve,tenors,knots,hz,scheds,repriced,err,
+          survival:knots.map(t=>curve.value(t))};
+}
+
+function riskSet(dc,cc,sc,R,N,coupon){
+  const ann=annuity(dc,cc,sc), clean=ann-sc.accr;
+  const prot=protLeg(dc,cc,sc,R)*N;              // protLeg is PER UNIT notional
+  const mtm=prot-coupon*clean*N;                 // clean mark = quoted upfront
+  const stream=prot-coupon*ann*N;                // raw cashflow PV, used for JTD
+  const accrued=N*coupon*sc.accr;
+  const par=prot/(clean*N);
+
+  // CS01: solve the parallel hazard shift that lifts the par spread by 1bp,
+  // then reprice. Matches creditlib's method="reprice" rather than the
+  // credit-triangle approximation.
+  const shifted=d=>mkCurve(cc.times,cc.rates.map(x=>Math.max(x+d,0)));
+  const target=par+1e-4;
+  let lo=0, hi=Math.max(1e-4/(1-R)*5,1e-4);
+  while(parSpread(dc,shifted(hi),sc,R)<target && hi<5) hi*=2;
+  for(let n=0;n<200;n++){const m=(lo+hi)/2;(parSpread(dc,shifted(m),sc,R)<target?lo=m:hi=m);}
+  const bc=shifted((lo+hi)/2);
+  const cs01=(protLeg(dc,bc,sc,R)*N-coupon*(annuity(dc,bc,sc)-sc.accr)*N)-mtm;
+
+  const dcUp=mkDisc(dc.times,dc.times.map(t=>-Math.log(dc.df(t))/t+1e-4));
+  const irdv01=(protLeg(dcUp,cc,sc,R)*N-coupon*(annuity(dcUp,cc,sc)-sc.accr)*N)-mtm;
+
+  const jtd=N*(1-R)-accrued-stream;
+  return {mtm,stream,par,rpv01:ann,rpv01clean:clean,cs01,irdv01,jtd,accrued};
+}
+
+/* ---------------------------------------------------------------- SELF TEST
+   Exact values from the Python engine, trade 2026-08-17, R=0.40.            */
+const SELFTEST=(()=>{
+  const T=[0.25,0.5,1,2,3,5,7,10], Z=[.0430,.0421,.0402,.0381,.0374,.0372,.0378,.0390];
+  const dc=mkDisc(T,Z), trade=ymd('2026-08-17');
+  const checks=[];
+  const push=(n,got,want,tol)=>checks.push({n,got,want,ok:Math.abs(got-want)<=tol});
+
+  push('DF(1)',dc.df(1),0.960597300479,1e-12);
+  push('DF(5)',dc.df(5),0.830273594982,1e-12);
+  const sc=makeSchedule(trade,5);
+  push('5Y maturity T',sc.T,4.8438356164,1e-9);
+  push('accrued frac',sc.accr,0.161111111111,1e-12);
+  push('n periods',sc.tE.length,20,0);
+
+  const b=bootstrap({1:.0055,3:.0082,5:.0105,7:.0118,10:.0130},dc,0.40,trade);
+  const H=[0.009243781854,0.015842791800,0.023952843029,0.026347942350,0.028191675578];
+  const S=[0.992255239480,0.961266209429,0.916301718535,0.869203805591,0.798652044711];
+  H.forEach((h,k)=>push(`hazard ${k+1}`,b.hz[k],h,1e-11));
+  S.forEach((s,k)=>push(`survival ${k+1}`,b.survival[k],s,1e-11));
+
+  const r=riskSet(dc,b.curve,sc,0.40,1e7,0.01);
+  push('protection PV',protLeg(dc,b.curve,sc,0.40)*1e7,452891.278695,1e-3);
+  push('RPV01',r.rpv01,4.4743613844,1e-9);
+  push('MTM',r.mtm,21566.251366,1e-4);
+  push('par spread bp',r.par*1e4,105.0,1e-9);
+  push('JTD',r.jtd,5978433.7486,1e-2);
+  push('CS01',r.cs01,4303.105137,2.0);
+  return checks;
+})();
+
+/* ============================ UI ======================================== */
+const PRESETS={
+  banks:{mode:'single',rows:[['JPMorgan',58],['Bank of America',63],['U.S. Bancorp',67],
+    ['Wells Fargo',72],['Citigroup',85]]},
+  curve:{mode:'multi',rows:[['JPMorgan',[40,49,58,66,74]],['Citigroup',[62,74,85,96,104]]]},
+  stress:{mode:'single',rows:[['IG name',95],['Crossover',310],['High yield',620],['Distressed',1450]]}
+};
+const TENORS=[1,3,5,7,10];
+const COL=['#6BA8DE','#4FBFA0','#E3A44B','#C77DD8','#E5776F','#7FD4C1','#DE9A6B','#9BA8F0'];
+let state={mode:'single',rows:JSON.parse(JSON.stringify(PRESETS.banks.rows)),view:'pd'};
+let RESULT=null;
+
+const $=id=>document.getElementById(id);
+const num=s=>parseFloat(String(s).replace(/[^0-9.\-]/g,''))||0;
+const fmt=(v,d=2)=>v.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+function drawRows(){
+  const multi=state.mode==='multi';
+  $('rows').innerHTML=state.rows.map((r,i)=>{
+    if(!multi) return `<div class="row">
+      <input class="nm" data-i="${i}" data-f="n" value="${r[0]}">
+      <input data-i="${i}" data-f="s" value="${Array.isArray(r[1])?r[1][2]:r[1]}">
+      <button class="del" data-i="${i}">×</button></div>`;
+    const v=Array.isArray(r[1])?r[1]:TENORS.map(()=>r[1]);
+    return `<div style="margin-bottom:11px;padding-bottom:9px;border-bottom:1px solid var(--line)">
+      <div class="row" style="grid-template-columns:1fr 26px">
+        <input class="nm" data-i="${i}" data-f="n" value="${r[0]}">
+        <button class="del" data-i="${i}">×</button></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:5px">
+        ${TENORS.map((t,k)=>`<div><div style="font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-bottom:2px">${t}Y</div>
+        <input style="padding:5px 4px;font-size:12px;text-align:center" data-i="${i}" data-f="t${k}" value="${v[k]}"></div>`).join('')}
+      </div></div>`;
+  }).join('');
+  $('rows').querySelectorAll('input').forEach(el=>el.oninput=()=>{
+    const i=+el.dataset.i,f=el.dataset.f;
+    if(f==='n') state.rows[i][0]=el.value;
+    else if(f==='s') state.rows[i][1]=num(el.value);
+    else{ if(!Array.isArray(state.rows[i][1]))
+            state.rows[i][1]=TENORS.map(()=>state.rows[i][1]);
+          state.rows[i][1][+f.slice(1)]=num(el.value); }
+    run();
+  });
+  $('rows').querySelectorAll('.del').forEach(b=>b.onclick=()=>{
+    state.rows.splice(+b.dataset.i,1); drawRows(); run(); });
+  $('modeNote').textContent = multi
+    ? 'Five quotes per name gives a real term structure — the shape is where a slow-burn credit concern would show up.'
+    : 'One quote per name means one hazard rate: the curve is FLAT by construction. Everything away from 5Y is assumption, not market data.';
+}
+
+let _t=null;
+function run(){ clearTimeout(_t); _t=setTimeout(runNow,60); }
+function runNow(){
+  const R=+$('rec').value/100, N=num($('notional').value), cpn=num($('coupon').value)*1e-4;
+  const trade=ymd($('tdate').value||'2026-08-17');
+  const T=[0.25,0.5,1,2,3,5,7,10], Z=[.0430,.0421,.0402,.0381,.0374,.0372,.0378,.0390];
+  const dc=mkDisc(T,Z);
+  const out=[],errs=[];
+
+  for(const [name,sp] of state.rows){
+    if(!name.trim()) continue;
+    const q={};
+    if(state.mode==='multi'){ const v=Array.isArray(sp)?sp:TENORS.map(()=>sp);
+      TENORS.forEach((t,k)=>{ if(v[k]>0) q[t]=v[k]*1e-4; }); }
+    else { const s=Array.isArray(sp)?sp[2]:sp; if(s>0) q[5]=s*1e-4; }
+    if(!Object.keys(q).length) continue;
+    try{
+      const b=bootstrap(q,dc,R,trade);
+      const sc=makeSchedule(trade,Math.max(...b.tenors));
+      out.push({name,q,b,risk:riskSet(dc,b.curve,sc,R,N,cpn),dc,R,trade,single:Object.keys(q).length===1});
+    }catch(e){ errs.push({name,msg:e.message}); }
+  }
+  RESULT={rows:out,R,N,cpn,dc,trade,errs};
+
+  $('errs').innerHTML=errs.map(e=>
+    `<div class="err"><strong>${e.name}</strong> — ${e.msg}</div>`).join('');
+  const worst=out.length?Math.max(...out.map(o=>o.b.err)):0;
+  $('reprice').className='badge '+(worst<1e-12?'ok':'bad');
+  $('reprice').textContent=out.length?`reprice ${worst.toExponential(1)}`:'no names';
+
+  drawChart(); drawRank(); drawRisk(); drawBounds();
+}
+
+/* ------------------------------ charts (hand-rolled SVG) ---------------- */
+function drawChart(){
+  const rows=RESULT.rows; if(!rows.length){$('chart').innerHTML='';return;}
+  const W=820,H=340,P={l:56,r:16,t:14,b:38};
+  const iw=W-P.l-P.r, ih=H-P.t-P.b;
+  let series,ymax,ylab,xmax=10,xlab='Years';
+
+  if(state.view==='rec'){
+    const RS=[0.40,0.25,0.10];
+    const vals=rows.map(o=>RS.map(r=>{
+      try{ const b=bootstrap(o.q,o.dc,r,o.trade); return (1-b.curve.value(5))*100; }catch(e){ return 0; }}));
+    ymax=Math.max(...vals.flat())*1.15||1;
+    const bw=iw/rows.length/(RS.length+.6);
+    let bars='';
+    rows.forEach((o,i)=>RS.forEach((r,j)=>{
+      const x=P.l+iw*(i+.12)/rows.length+j*bw, h=ih*vals[i][j]/ymax;
+      bars+=`<rect x="${x}" y="${P.t+ih-h}" width="${bw*.86}" height="${h}"
+        fill="${['#E3A44B','#C77DD8','#6BA8DE'][j]}" opacity=".9"><title>${o.name} R=${r*100}%: ${vals[i][j].toFixed(2)}%</title></rect>`;
+    }));
+    const xl=rows.map((o,i)=>`<text x="${P.l+iw*(i+.5)/rows.length}" y="${H-16}"
+      fill="#8A9BAC" font-size="10.5" text-anchor="middle" font-family="Inter">${o.name.length>14?o.name.slice(0,13)+'…':o.name}</text>`).join('');
+    const leg=RS.map((r,j)=>`<rect x="${P.l+j*92}" y="${P.t-4}" width="9" height="9" fill="${['#E3A44B','#C77DD8','#6BA8DE'][j]}"/>
+      <text x="${P.l+j*92+14}" y="${P.t+4}" fill="#8A9BAC" font-size="10.5" font-family="IBM Plex Mono">R=${(r*100).toFixed(0)}%</text>`).join('');
+    $('chart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+      ${grid(P,iw,ih,ymax,'5Y cumulative PD (%)')}${bars}${xl}${leg}</svg>`;
+    return;
+  }
+
+  if(state.view==='pd'){
+    series=rows.map((o,i)=>({name:o.name,col:COL[i%COL.length],single:o.single,
+      pts:Array.from({length:121},(_,k)=>{const t=k/12;return[t,(1-o.b.curve.value(t))*100];}),
+      knots:o.b.knots.map(t=>[t,(1-o.b.curve.value(t))*100])}));
+    ymax=Math.max(...series.flatMap(s=>s.pts.map(p=>p[1])))*1.15||1;
+    ylab='Cumulative default probability (%)';
+  }else{
+    series=rows.map((o,i)=>{const pts=[];
+      o.b.knots.forEach((t,k)=>{const prev=k?o.b.knots[k-1]:0;
+        pts.push([prev,o.b.hz[k]*1e4]); pts.push([t,o.b.hz[k]*1e4]);});
+      return {name:o.name,col:COL[i%COL.length],single:o.single,pts,knots:[]};});
+    ymax=Math.max(...series.flatMap(s=>s.pts.map(p=>p[1])))*1.15||1;
+    ylab='Forward hazard (bp)';
+  }
+  const X=t=>P.l+iw*t/xmax, Y=v=>P.t+ih-ih*v/ymax;
+  const paths=series.map(s=>{
+    const d=s.pts.map((p,k)=>`${k?'L':'M'}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(' ');
+    const solid=s.single&&state.view==='pd'
+      ? s.pts.filter(p=>p[0]<=5).map((p,k)=>`${k?'L':'M'}${X(p[0]).toFixed(1)} ${Y(p[1]).toFixed(1)}`).join(' ') : null;
+    return `<path d="${d}" fill="none" stroke="${s.col}" stroke-width="${solid?1.4:2}"
+      ${solid?'stroke-dasharray="4 3" opacity=".75"':''}/>`
+      +(solid?`<path d="${solid}" fill="none" stroke="${s.col}" stroke-width="2.2"/>`:'')
+      +s.knots.map(k=>`<circle cx="${X(k[0])}" cy="${Y(k[1])}" r="3.6" fill="${s.col}" stroke="#18222D" stroke-width="1.4"/>`).join('');
+  }).join('');
+  const LEGMAX=12, shown=series.slice(0,LEGMAX);
+  let leg=shown.map((s,i)=>`<rect x="${P.l+8}" y="${P.t+8+i*14}" width="8" height="8" fill="${s.col}"/>
+    <text x="${P.l+21}" y="${P.t+15.5+i*14}" fill="#DFE7EF" font-size="10.5" font-family="Inter">${s.name.length>22?s.name.slice(0,21)+'…':s.name}</text>`).join('');
+  if(series.length>LEGMAX) leg+=`<text x="${P.l+8}" y="${P.t+15.5+LEGMAX*14}" fill="#8A9BAC"
+    font-size="10.5" font-family="Inter">+${series.length-LEGMAX} more — see table below</text>`;
+  const xt=[0,2,4,6,8,10].map(t=>`<text x="${X(t)}" y="${H-16}" fill="#8A9BAC" font-size="10.5"
+    text-anchor="middle" font-family="IBM Plex Mono">${t}</text>`).join('');
+  $('chart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+    ${grid(P,iw,ih,ymax,ylab)}${paths}${leg}${xt}
+    <text x="${P.l+iw/2}" y="${H-2}" fill="#8A9BAC" font-size="10.5" text-anchor="middle" font-family="Inter">${xlab}</text></svg>`;
+}
+function grid(P,iw,ih,ymax,ylab){
+  let g='';
+  for(let k=0;k<=4;k++){const y=P.t+ih-ih*k/4, v=ymax*k/4;
+    g+=`<line x1="${P.l}" y1="${y}" x2="${P.l+iw}" y2="${y}" stroke="#2C3A49" stroke-width="1"/>
+        <text x="${P.l-8}" y="${y+3.5}" fill="#8A9BAC" font-size="10.5" text-anchor="end" font-family="IBM Plex Mono">${v.toFixed(v<10?1:0)}</text>`;}
+  g+=`<text transform="translate(13,${P.t+ih/2}) rotate(-90)" fill="#8A9BAC" font-size="10.5"
+      text-anchor="middle" font-family="Inter">${ylab}</text>`;
+  return g;
+}
+
+/* ------------------------------ tables ---------------------------------- */
+function drawRank(){
+  const rows=[...RESULT.rows].sort((a,b)=>a.b.curve.value(5)>b.b.curve.value(5)?-1:1);
+  $('rank').innerHTML=`<thead><tr><th>Issuer</th><th>5Y bp</th><th>Hazard bp</th>
+    <th>Fwd spr bp</th><th>1Y PD</th><th>5Y PD</th><th>10Y PD</th></tr></thead><tbody>`+
+    rows.map((o,i)=>{const h=o.b.curve.rateAt(5);return `<tr>
+      <td class="nm"><span class="sw" style="background:${COL[RESULT.rows.indexOf(o)%COL.length]}"></span>${o.name}</td>
+      <td>${o.q[5]?fmt(o.q[5]*1e4,0):'—'}</td><td class="hi">${fmt(h*1e4,1)}</td>
+      <td>${fmt(h*(1-RESULT.R)*1e4,1)}</td>
+      <td>${fmt((1-o.b.curve.value(1))*100,2)}%</td>
+      <td>${fmt((1-o.b.curve.value(5))*100,2)}%</td>
+      <td>${fmt((1-o.b.curve.value(10))*100,2)}%</td></tr>`;}).join('')+'</tbody>';
+  $('ranknote').innerHTML=`Recovery <strong>${(RESULT.R*100).toFixed(0)}%</strong> applied uniformly, so
+    h = s/(1−R) is a monotone transform of the spread and <strong>the ranking is invariant</strong> —
+    only the levels move. Risk-neutral, not actuarial: these run roughly 8–12× historical default rates.`;
+}
+function drawRisk(){
+  $('risk').innerHTML=`<thead><tr><th>Issuer</th><th>RPV01</th><th>MTM</th><th>Par bp</th>
+    <th>CS01</th><th>IR DV01</th><th>JTD</th><th>JTD/CS01</th></tr></thead><tbody>`+
+    RESULT.rows.map(o=>{const r=o.risk;return `<tr>
+      <td class="nm">${o.name}</td><td>${fmt(r.rpv01,4)}</td>
+      <td class="${r.mtm>=0?'pos':'neg'}">${fmt(r.mtm,0)}</td>
+      <td>${fmt(r.par*1e4,2)}</td><td>${fmt(r.cs01,0)}</td>
+      <td class="${r.irdv01>=0?'pos':'neg'}">${fmt(r.irdv01,0)}</td>
+      <td class="hi">${fmt(r.jtd,0)}</td><td>${fmt(r.jtd/r.cs01,0)}×</td></tr>`;}).join('')+'</tbody>';
+}
+function drawBounds(){
+  const rows=RESULT.rows.filter(o=>!o.single);
+  if(!rows.length){ $('bounds').innerHTML=`<tbody><tr><td class="nm" style="color:var(--dim);border:none">
+    Switch to full-curve mode to see per-tenor arbitrage bounds.</td></tr></tbody>`; return; }
+  let html=`<thead><tr><th>Issuer</th><th>Tenor</th><th>Floor bp</th><th>Quoted bp</th>
+    <th>Ceiling bp</th><th></th></tr></thead><tbody>`;
+  for(const o of rows){
+    o.b.tenors.forEach((t,k)=>{
+      const sc=o.b.scheds[k], kn=o.b.knots.slice(0,k+1), prior=o.b.hz.slice(0,k);
+      const lo=parSpread(o.dc,mkCurve(kn,[...prior,0]),sc,RESULT.R)*1e4;
+      const hi=parSpread(o.dc,mkCurve(kn,[...prior,20]),sc,RESULT.R)*1e4;
+      const q=o.q[t]*1e4, ok=lo<q&&q<hi;
+      html+=`<tr><td class="nm">${k?'':o.name}</td><td>${t}Y</td><td>${fmt(lo,2)}</td>
+        <td class="hi">${fmt(q,2)}</td><td>${fmt(hi,0)}</td>
+        <td class="${ok?'pos':'neg'}">${ok?'ok':'OUT'}</td></tr>`;});
+  }
+  $('bounds').innerHTML=html+'</tbody>';
+}
+
+/* ------------------------------ export ---------------------------------- */
+function show(t){ $('out').classList.remove('hidden'); $('out').value=t; }
+$('genMd').onclick=()=>{
+  const r=RESULT, sorted=[...r.rows].sort((a,b)=>a.b.curve.value(5)>b.b.curve.value(5)?-1:1);
+  show(`### CDS-implied credit ranking
+
+Trade date ${$('tdate').value} · recovery **${(r.R*100).toFixed(0)}%** · notional ${fmt(r.N,0)}
+
+| Issuer | 5Y spread (bp) | Implied hazard (bp) | 1Y PD | 5Y PD | 10Y PD |
+|---|---|---|---|---|---|
+${sorted.map(o=>`| ${o.name} | ${o.q[5]?fmt(o.q[5]*1e4,0):'—'} | ${fmt(o.b.curve.rateAt(5)*1e4,1)} | ${fmt((1-o.b.curve.value(1))*100,2)}% | ${fmt((1-o.b.curve.value(5))*100,2)}% | ${fmt((1-o.b.curve.value(10))*100,2)}% |`).join('\n')}
+
+**Ranking is invariant to the recovery assumption.** With a uniform R, h = s/(1−R) is a
+monotone transform of the spread — recovery moves the levels, never the order. Reordering
+would require name-specific recovery differentials.
+
+**These are risk-neutral probabilities, not forecasts.** They embed a default risk premium,
+a liquidity premium and correlation compensation, and run roughly 8–12× historical default
+rates for comparable ratings.
+${r.rows.some(o=>o.single)?`
+**Single quote per name.** One 5Y spread gives one hazard rate, so each curve is flat by
+construction. Points away from 5Y are the interpolation assumption, not market information.`:''}
+
+| Issuer | RPV01 | MTM | CS01 | JTD | JTD/CS01 |
+|---|---|---|---|---|---|
+${r.rows.map(o=>`| ${o.name} | ${fmt(o.risk.rpv01,4)} | ${fmt(o.risk.mtm,0)} | ${fmt(o.risk.cs01,0)} | ${fmt(o.risk.jtd,0)} | ${fmt(o.risk.jtd/o.risk.cs01,0)}× |`).join('\n')}
+
+*Quotes repriced to ${Math.max(...r.rows.map(o=>o.b.err)).toExponential(1)} relative. Recovery is an
+ISDA convention, not an estimate — for bank holdcos, senior unsecured is the bail-in layer and
+Lehman senior settled at 8.625 cents in 2008.*`);
+};
+$('genCsv').onclick=()=>show('name,spread_5y_bp,hazard_bp,fwd_spread_bp,pd_1y,pd_5y,pd_10y,rpv01,mtm,cs01,jtd\n'+
+  RESULT.rows.map(o=>[o.name,o.q[5]?(o.q[5]*1e4).toFixed(2):'',(o.b.curve.rateAt(5)*1e4).toFixed(4),
+    (o.b.curve.rateAt(5)*(1-RESULT.R)*1e4).toFixed(4),(1-o.b.curve.value(1)).toFixed(6),
+    (1-o.b.curve.value(5)).toFixed(6),(1-o.b.curve.value(10)).toFixed(6),
+    o.risk.rpv01.toFixed(6),o.risk.mtm.toFixed(2),o.risk.cs01.toFixed(2),o.risk.jtd.toFixed(2)].join(',')).join('\n'));
+$('genPy').onclick=()=>{
+  const q=o=>state.mode==='multi'
+    ? '{'+Object.entries(o.q).map(([t,s])=>`${t}: ${(s*1e4).toFixed(0)}`).join(', ')+'}'
+    : (o.q[5]*1e4).toFixed(0);
+  show(`# Reproduce in creditlib (identical maths, validated engine)
+from datetime import date
+from creditlib import compare, analyze, recovery_sensitivity
+
+NAMES = {
+${RESULT.rows.map(o=>`    "${o.name}": ${q(o)},`).join('\n')}
+}
+
+x = compare(NAMES, recovery=${RESULT.R.toFixed(2)}, trade_date=date(${$('tdate').value.split('-').join(', ')}))
+print(x)
+print(x.report())
+
+print(recovery_sensitivity(NAMES, recoveries=(0.40, 0.25, 0.10)))
+x.plot()`);
+};
+$('copyOut').onclick=()=>{ if($('out').value){ navigator.clipboard.writeText($('out').value);
+  $('copyOut').textContent='Copied'; setTimeout(()=>$('copyOut').textContent='Copy',1200);} };
+
+/* ---------------------------- paste import ------------------------------ */
+function parsePaste(txt){
+  const out=[], bad=[];
+  for(const raw of txt.split(/\r?\n/)){
+    const line=raw.trim(); if(!line) continue;
+    const f=line.split(/\t|,|;|\s{2,}/).map(s=>s.trim()).filter(s=>s!=='');
+    if(f.length<2) continue;
+    const name=f[0];
+    const nums=f.slice(1).map(s=>parseFloat(s.replace(/[^0-9.\-]/g,'')))
+                 .filter(v=>!isNaN(v)&&v>0);
+    if(!nums.length){ bad.push(name); continue; }      // header row or junk
+    out.push([name, nums.length>=5 ? nums.slice(0,5) : nums[nums.length===1?0:nums.length-1]]);
+  }
+  return {rows:out, skipped:bad};
+}
+function applyPaste(append){
+  const {rows,skipped}=parsePaste($('pasteBox').value);
+  if(!rows.length){ $('pasteMsg').textContent='Nothing parsed. Each line needs a name and at least one number.'; return; }
+  const multi=rows.some(r=>Array.isArray(r[1]));
+  state.mode = multi?'multi':'single'; $('mode').value=state.mode;
+  state.rows = append ? [...state.rows, ...rows] : rows;
+  $('pasteMsg').textContent=`Loaded ${rows.length} name${rows.length>1?'s':''}`+
+    (skipped.length?` · skipped ${skipped.length} (${skipped.slice(0,2).join(', ')})`:'');
+  drawRows(); run();
+}
+
+/* ------------------------------ wiring ---------------------------------- */
+$('pasteToggle').onclick=()=>{ $('pastePanel').classList.toggle('hidden'); $('pasteBox').focus(); };
+$('pasteLoad').onclick=()=>applyPaste(false);
+$('pasteAppend').onclick=()=>applyPaste(true);
+$('pasteCancel').onclick=()=>{ $('pastePanel').classList.add('hidden'); $('pasteMsg').textContent=''; };
+$('rec').oninput=()=>{ $('recVal').textContent=$('rec').value+'%'; run(); };
+['notional','coupon','tdate'].forEach(id=>$(id).oninput=run);
+$('mode').onchange=()=>{ state.mode=$('mode').value; drawRows(); run(); };
+$('addRow').onclick=()=>{ state.rows.push(['New name',100]); drawRows(); run(); };
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); state.view=b.dataset.view; drawChart(); });
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+  const p=PRESETS[b.dataset.preset];
+  state.mode=p.mode; $('mode').value=p.mode;
+  state.rows=JSON.parse(JSON.stringify(p.rows)); drawRows(); run(); });
+
+/* self-test badge */
+(()=>{ const bad=SELFTEST.filter(c=>!c.ok);
+  const el=$('selftest');
+  if(bad.length){ el.className='badge bad';
+    el.textContent=`self-test FAILED (${bad.length}/${SELFTEST.length})`;
+    el.title=bad.map(c=>`${c.n}: got ${c.got} want ${c.want}`).join('\n'); }
+  else { el.className='badge ok'; el.textContent=`self-test ${SELFTEST.length}/${SELFTEST.length} vs Python`;
+    el.title=SELFTEST.map(c=>`${c.n} ✓`).join('\n'); } })();
+
+drawRows(); run();
+</script>
+</body>
+</html>
