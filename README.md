@@ -50,7 +50,7 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 # 2. install the library, editable, plus test + notebook extras
 pip install -e ".[test,notebook]"
 
-# 3. verify -- should print 86 passed
+# 3. verify -- should print 104 passed
 pytest -q
 
 # 4. see it work
@@ -64,7 +64,7 @@ jupyter notebook notebooks/bank_credit_analysis.ipynb
 
 QuantLib is a **validation-only** dependency, never on the pricing path. If it fails to
 install (it has no wheel on some platforms), everything still works — the ~8 parity tests
-skip cleanly and you'll see `78 passed, 8 skipped`.
+skip cleanly and you'll see `96 passed, 8 skipped`.
 
 ### Minimal usage
 
