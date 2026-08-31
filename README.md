@@ -8,6 +8,12 @@ Every formula is derived before it is coded — see [`docs/creditlib_documentati
 (25pp). Every component is validated against no-arbitrage conditions and, where a comparable
 object exists, against QuantLib.
 
+Built with substantial LLM assistance under a specified verification protocol.
+[`docs/ai_methodology_appendix.pdf`](docs/ai_methodology_appendix.pdf) documents the
+workflow, the division of labour, and which of the six defects was caught by which
+control — none by the generating model reviewing its own output.
+
+
 ```
 104 tests passing
 QuantLib parity      1e-12 relative
